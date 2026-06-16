@@ -11,6 +11,7 @@ permissions:
   packages: write
 
 env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   REGISTRY: ghcr.io
   FRONTEND_IMAGE: ghcr.io/halesyy/jackhales-testing-frontend
   BACKEND_IMAGE: ghcr.io/halesyy/jackhales-testing-backend
