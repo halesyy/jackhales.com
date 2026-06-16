@@ -12,6 +12,11 @@ services:
     labels:
       - traefik.enable=true
       - traefik.docker.network=dokploy-network
+      - traefik.http.middlewares.jackhales-https-redirect.redirectscheme.scheme=https
+      - traefik.http.middlewares.jackhales-https-redirect.redirectscheme.permanent=true
+      - traefik.http.routers.jackhales-frontend-web.rule=Host(`jackhales.jackhalestesting.xyz`)
+      - traefik.http.routers.jackhales-frontend-web.entrypoints=web
+      - traefik.http.routers.jackhales-frontend-web.middlewares=jackhales-https-redirect
       - traefik.http.routers.jackhales-frontend.rule=Host(`jackhales.jackhalestesting.xyz`)
       - traefik.http.routers.jackhales-frontend.entrypoints=websecure
       - traefik.http.routers.jackhales-frontend.tls=true
@@ -37,6 +42,10 @@ services:
     labels:
       - traefik.enable=true
       - traefik.docker.network=dokploy-network
+      - traefik.http.routers.jackhales-backend-web.rule=Host(`jackhales.jackhalestesting.xyz`) && PathPrefix(`/api`)
+      - traefik.http.routers.jackhales-backend-web.priority=100
+      - traefik.http.routers.jackhales-backend-web.entrypoints=web
+      - traefik.http.routers.jackhales-backend-web.middlewares=jackhales-https-redirect
       - traefik.http.routers.jackhales-backend.rule=Host(`jackhales.jackhalestesting.xyz`) && PathPrefix(`/api`)
       - traefik.http.routers.jackhales-backend.priority=100
       - traefik.http.routers.jackhales-backend.entrypoints=websecure
