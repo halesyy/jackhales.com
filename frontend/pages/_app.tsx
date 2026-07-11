@@ -1,4 +1,5 @@
 import type { AppProps } from "next/app";
+import Head from "next/head";
 import Script from "next/script";
 import { useRouter } from "next/router";
 import { useEffect } from "react";
@@ -31,6 +32,9 @@ export default function App({ Component, pageProps }: AppProps) {
 
   return (
     <>
+      <Head>
+        <link rel="icon" href="/favicon.ico" sizes="any" />
+      </Head>
       <Component {...pageProps} />
       {analyticsEnabled ? (
         <>
