@@ -1056,8 +1056,8 @@ textarea:focus {
   .articles-grid { grid-template-columns: 1fr; }
   .capability-card { min-height: 240px; }
   .bento-card { min-height: 0; }
-  .bento-skills { grid-column: auto; }
-  .bento-skills .skill-groups { display: flex; }
+  .bento-skills { display: flex; grid-column: auto; }
+  .bento-skills .skill-groups { display: flex; flex-direction: column; padding-top: 2rem; }
   .interest-list, .social-links { margin-top: 1rem; }
   .experience-intro-grid, .integration-grid, .experiments-grid { grid-template-columns: 1fr; }
   .experience-statement { min-height: 420px; grid-row: auto; }
