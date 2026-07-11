@@ -3,6 +3,8 @@ services:
     image: ghcr.io/halesyy/jackhales-testing-frontend:${IMAGE_TAG:-latest}
     build:
       context: ./frontend
+      args:
+        BUILD_API_BASE_URL: ${BUILD_API_BASE_URL:-https://jackhales.jackhalestesting.xyz/api}
     environment:
       NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-/api}
       INTERNAL_API_BASE_URL: ${INTERNAL_API_BASE_URL:-http://backend:8000/api}

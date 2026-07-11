@@ -6,6 +6,8 @@ RUN npm ci
 FROM node:22-alpine AS builder
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
+ARG BUILD_API_BASE_URL=https://jackhales.jackhalestesting.xyz/api
+ENV INTERNAL_API_BASE_URL=$BUILD_API_BASE_URL
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build
@@ -21,4 +23,3 @@ COPY --from=builder /app/.next/static ./.next/static
 
 EXPOSE 3000
 CMD ["node", "server.js"]
-
