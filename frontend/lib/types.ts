@@ -17,8 +17,9 @@ export type articleDetail = articleSummary & {
 };
 
 export type adminStatus = {
-  hasPin: boolean;
-  allowedIp: boolean;
+  configured: boolean;
+  authenticated: boolean;
+  email: string;
 };
 
 export type articleViewCount = {

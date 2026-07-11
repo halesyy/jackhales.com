@@ -12,13 +12,16 @@ type adminView = "library" | "new" | "edit";
 
 export default function AdminPage() {
   const [status, setStatus] = useState<adminStatus | null>(null);
-  const [pin, setPin] = useState("");
+  const [email, setEmail] = useState("me@jackhales.com");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [loggedIn, setLoggedIn] = useState(false);
   const [articles, setArticles] = useState<articleSummary[]>([]);
   const [editing, setEditing] = useState<articleDetail | undefined>();
   const [view, setView] = useState<adminView>("library");
   const [message, setMessage] = useState("");
   const [loadingArticle, setLoadingArticle] = useState(false);
+  const [submittingCredentials, setSubmittingCredentials] = useState(false);
 
   async function loadArticles() {
     const nextArticles = await adminFetch<articleSummary[]>("/admin/articles");
@@ -34,19 +37,22 @@ export default function AdminPage() {
         const nextStatus = await adminFetch<adminStatus>("/admin/status");
         if (!active) return;
         setStatus(nextStatus);
+        setEmail(nextStatus.email);
 
-        if (nextStatus.allowedIp && nextStatus.hasPin) {
+        if (nextStatus.authenticated) {
           try {
             const nextArticles = await adminFetch<articleSummary[]>("/admin/articles");
             if (!active) return;
             setArticles(nextArticles);
             setLoggedIn(true);
           } catch {
-            // A PIN exists but the browser has no active session yet.
+            // The session may have expired between the status and article requests.
           }
         }
-      } catch {
-        if (active) setStatus({ hasPin: true, allowedIp: false });
+      } catch (error) {
+        if (!active) return;
+        setStatus({ configured: true, authenticated: false, email: "me@jackhales.com" });
+        setMessage(error instanceof Error ? error.message : "Could not connect to the admin service.");
       }
     }
 
@@ -56,13 +62,26 @@ export default function AdminPage() {
     };
   }, []);
 
-  async function submitPin() {
-    const endpoint = status?.hasPin ? "/admin/login" : "/admin/bootstrap";
-    await adminFetch(endpoint, { method: "POST", body: JSON.stringify({ pin }) });
+  async function submitCredentials() {
+    if (!status) return;
+    if (!status.configured && password !== confirmPassword) {
+      setMessage("Passwords do not match.");
+      return;
+    }
+
+    setSubmittingCredentials(true);
     setMessage("");
-    setPin("");
-    await loadArticles();
-    setView("library");
+    try {
+      const endpoint = status.configured ? "/admin/login" : "/admin/bootstrap";
+      await adminFetch(endpoint, { method: "POST", body: JSON.stringify({ email, password }) });
+      setPassword("");
+      setConfirmPassword("");
+      setStatus({ ...status, configured: true, authenticated: true });
+      await loadArticles();
+      setView("library");
+    } finally {
+      setSubmittingCredentials(false);
+    }
   }
 
   async function editArticle(slug: string) {
@@ -109,21 +128,13 @@ export default function AdminPage() {
     setArticles([]);
     setEditing(undefined);
     setView("library");
+    setStatus((current) => current ? { ...current, configured: true, authenticated: false } : current);
   }
 
   if (!status) {
     return (
       <SiteShell>
         <div className="admin-loading card"><span /> Connecting to the publishing workspace…</div>
-      </SiteShell>
-    );
-  }
-
-  if (!status.allowedIp) {
-    return (
-      <SiteShell>
-        <Head><title>Admin — Jack Hales</title></Head>
-        <div className="card p-6 text-sm text-neutral-700">Admin is not available from this IP.</div>
       </SiteShell>
     );
   }
@@ -135,14 +146,24 @@ export default function AdminPage() {
         <div className="admin-login card">
           <span className="icon-tile icon-blue"><FilePenLine size={21} /></span>
           <p className="eyebrow">Publishing workspace</p>
-          <h1>{status.hasPin ? "Welcome back." : "Create your editor PIN."}</h1>
-          <p>{status.hasPin ? "Enter your PIN to manage articles and drafts." : "Use at least six characters. This PIN protects the article editor."}</p>
+          <h1>{status.configured ? "Welcome back." : "Create your admin account."}</h1>
+          <p>{status.configured ? "Sign in to manage articles and drafts." : "First start is reserved for me@jackhales.com. Choose a password with at least 12 characters."}</p>
           <label>
-            <span>PIN</span>
-            <input type="password" autoComplete="current-password" value={pin} onChange={(event) => setPin(event.target.value)} onKeyDown={(event) => event.key === "Enter" && submitPin().catch((error) => setMessage(error.message))} />
+            <span>Email</span>
+            <input type="email" autoComplete="username" value={email} readOnly aria-readonly="true" />
           </label>
-          <button className="button button-dark" disabled={pin.length < 6} onClick={() => submitPin().catch((error) => setMessage(error.message))}>
-            {status.hasPin ? "Open workspace" : "Save PIN"}
+          <label>
+            <span>Password</span>
+            <input type="password" autoComplete={status.configured ? "current-password" : "new-password"} value={password} onChange={(event) => setPassword(event.target.value)} onKeyDown={(event) => event.key === "Enter" && status.configured && submitCredentials().catch((error) => setMessage(error.message))} />
+          </label>
+          {!status.configured ? (
+            <label>
+              <span>Confirm password</span>
+              <input type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} onKeyDown={(event) => event.key === "Enter" && submitCredentials().catch((error) => setMessage(error.message))} />
+            </label>
+          ) : null}
+          <button className="button button-dark" disabled={password.length < 12 || (!status.configured && confirmPassword.length < 12) || submittingCredentials} onClick={() => submitCredentials().catch((error) => setMessage(error.message))}>
+            {submittingCredentials ? "Please wait…" : status.configured ? "Open workspace" : "Create admin account"}
           </button>
           {message ? <p className="admin-error">{message}</p> : null}
         </div>

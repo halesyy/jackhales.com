@@ -38,8 +38,6 @@ services:
     environment:
       MONGODB_URL: ${MONGODB_URL}
       MONGODB_DATABASE: ${MONGODB_DATABASE:-jackhales}
-      ADMIN_ALLOWED_IPS: ${ADMIN_ALLOWED_IPS:-182.253.75.243}
-      ADMIN_BOOTSTRAP_IP: ${ADMIN_BOOTSTRAP_IP:-182.253.75.243}
       SESSION_SECRET: ${SESSION_SECRET}
       PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-https://jackhales.jackhalestesting.xyz}
     labels:

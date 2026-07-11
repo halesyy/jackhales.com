@@ -8,7 +8,14 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from .config import getSettings
 
-pinIterations = 310_000
+adminEmail = "me@jackhales.com"
+passwordAlgorithm = "scrypt"
+passwordN = 2**14
+passwordR = 8
+passwordP = 1
+passwordLength = 32
+passwordSaltLength = 16
+passwordMaxMemory = 64 * 1024 * 1024
 sessionDays = 30
 
 
@@ -22,30 +29,56 @@ def getClientIp(request: Request) -> str:
     return request.client.host if request.client else ""
 
 
-def isAllowedIp(request: Request) -> bool:
-    settings = getSettings()
-    return getClientIp(request) in set(settings["adminAllowedIps"])
+def normalizeEmail(email: str) -> str:
+    return email.strip().lower()
 
 
-def assertAllowedIp(request: Request) -> None:
-    if not isAllowedIp(request):
-        raise HTTPException(status_code=403, detail="admin is not available from this IP")
+def hashPassword(password: str) -> str:
+    salt = secrets.token_bytes(passwordSaltLength)
+    digest = hashlib.scrypt(
+        password.encode("utf-8"),
+        salt=salt,
+        n=passwordN,
+        r=passwordR,
+        p=passwordP,
+        maxmem=passwordMaxMemory,
+        dklen=passwordLength,
+    )
+    return "$".join(
+        (
+            passwordAlgorithm,
+            str(passwordN),
+            str(passwordR),
+            str(passwordP),
+            salt.hex(),
+            digest.hex(),
+        )
+    )
 
 
-def hashPin(pin: str) -> str:
-    salt = secrets.token_hex(16)
-    digest = hashlib.pbkdf2_hmac("sha256", pin.encode(), salt.encode(), pinIterations).hex()
-    return f"pbkdf2_sha256${pinIterations}${salt}${digest}"
-
-
-def verifyPin(pin: str, storedHash: str) -> bool:
+def verifyPassword(password: str, storedHash: str) -> bool:
     try:
-        algorithm, iterations, salt, expected = storedHash.split("$", 3)
-        if algorithm != "pbkdf2_sha256":
+        algorithm, nValue, rValue, pValue, saltHex, expectedHex = storedHash.split("$", 5)
+        if algorithm != passwordAlgorithm:
             return False
-        digest = hashlib.pbkdf2_hmac("sha256", pin.encode(), salt.encode(), int(iterations)).hex()
+        n, r, p = int(nValue), int(rValue), int(pValue)
+        if (n, r, p) != (passwordN, passwordR, passwordP):
+            return False
+        salt = bytes.fromhex(saltHex)
+        expected = bytes.fromhex(expectedHex)
+        if len(salt) != passwordSaltLength or len(expected) != passwordLength:
+            return False
+        digest = hashlib.scrypt(
+            password.encode("utf-8"),
+            salt=salt,
+            n=n,
+            r=r,
+            p=p,
+            maxmem=passwordMaxMemory,
+            dklen=len(expected),
+        )
         return hmac.compare_digest(digest, expected)
-    except ValueError:
+    except (TypeError, ValueError):
         return False
 
 
@@ -61,13 +94,13 @@ def viewIpHash(ip: str) -> str:
     return hmac.new(secret, f"article-view:{ip}".encode(), hashlib.sha256).hexdigest()
 
 
-async def createSession(database: AsyncIOMotorDatabase, request: Request) -> str:
+async def createSession(database: AsyncIOMotorDatabase, email: str) -> str:
     token = secrets.token_urlsafe(48)
     now = datetime.now(UTC)
     await database.adminSessions.insert_one(
         {
             "tokenHash": tokenHash(token),
-            "ip": getClientIp(request),
+            "userEmail": normalizeEmail(email),
             "createdAt": now,
             "expiresAt": now + timedelta(days=sessionDays),
         }
@@ -75,11 +108,24 @@ async def createSession(database: AsyncIOMotorDatabase, request: Request) -> str
     return token
 
 
-async def requireAdmin(database: AsyncIOMotorDatabase, request: Request) -> None:
-    assertAllowedIp(request)
+async def authenticatedAdminEmail(database: AsyncIOMotorDatabase, request: Request) -> str | None:
     token = request.cookies.get("adminSession")
     if not token:
-        raise HTTPException(status_code=401, detail="admin session required")
-    session = await database.adminSessions.find_one({"tokenHash": tokenHash(token)})
+        return None
+    session = await database.adminSessions.find_one(
+        {"tokenHash": tokenHash(token), "expiresAt": {"$gt": datetime.now(UTC)}}
+    )
     if not session:
+        return None
+    email = normalizeEmail(str(session.get("userEmail", "")))
+    if email != adminEmail:
+        return None
+    user = await database.adminUsers.find_one({"_id": email, "email": email, "role": "admin"})
+    return email if user else None
+
+
+async def requireAdmin(database: AsyncIOMotorDatabase, request: Request) -> str:
+    email = await authenticatedAdminEmail(database, request)
+    if email is None:
         raise HTTPException(status_code=401, detail="admin session required")
+    return email

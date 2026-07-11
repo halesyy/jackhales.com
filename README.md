@@ -6,7 +6,7 @@ Minimal test rebuild of `jackhales.com` with:
 - Tailwind CSS
 - FastAPI backend
 - MongoDB-backed article system
-- PIN-protected `/admin`
+- Email/password-protected `/admin` with MongoDB-backed sessions
 - Docker Compose deployment behind Dokploy Traefik
 
 ## Local Development
@@ -45,3 +45,5 @@ IMAGE_TAG=local docker compose up -d --build --remove-orphans
 ```
 
 The remote host owns runtime secrets in `/srv/apps/jackhales-testing/.env`.
+
+On a fresh deployment, `/admin` offers one-time account setup for `me@jackhales.com`. Passwords are stored as salted scrypt hashes; the plaintext password is never stored.

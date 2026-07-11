@@ -7,10 +7,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pymongo.errors import DuplicateKeyError, PyMongoError
 
+from .auth_migration import applyPendingAuthMigration
 from .config import getSettings
 from .database import closeClient, ensureIndexes, getDatabase
-from .schemas import ArticleCreate, ArticleOut, ArticleSummary, ArticleUpdate, PinInput
-from .security import assertAllowedIp, createSession, getClientIp, hashPin, isAllowedIp, requireAdmin, tokenHash, verifyPin, viewIpHash
+from .schemas import AdminCredentials, ArticleCreate, ArticleOut, ArticleSummary, ArticleUpdate
+from .security import adminEmail, authenticatedAdminEmail, createSession, getClientIp, hashPassword, requireAdmin, tokenHash, verifyPassword, viewIpHash
 from .seeding import applyPendingReseed, seedArticles
 
 
@@ -45,6 +46,7 @@ def serializeSummary(document: dict) -> dict:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await applyPendingReseed(getDatabase())
+    await applyPendingAuthMigration(getDatabase())
     await ensureIndexes()
     await seedArticles(getDatabase())
     yield
@@ -70,6 +72,18 @@ def database() -> AsyncIOMotorDatabase:
 
 async def adminOnly(request: Request, database: AsyncIOMotorDatabase = Depends(database)) -> None:
     await requireAdmin(database, request)
+
+
+def setAdminSessionCookie(response: Response, token: str) -> None:
+    response.set_cookie(
+        "adminSession",
+        token,
+        httponly=True,
+        secure=True,
+        samesite="lax",
+        max_age=60 * 60 * 24 * 30,
+        path="/",
+    )
 
 
 @app.get("/api/health")
@@ -147,43 +161,58 @@ async def sitemap(database: AsyncIOMotorDatabase = Depends(database)) -> dict[st
 
 
 @app.get("/api/admin/status")
-async def adminStatus(request: Request, database: AsyncIOMotorDatabase = Depends(database)) -> dict[str, bool]:
-    admin = await database.adminConfig.find_one({"key": "pin"})
-    return {"hasPin": bool(admin), "allowedIp": isAllowedIp(request)}
+async def adminStatus(request: Request, database: AsyncIOMotorDatabase = Depends(database)) -> dict[str, bool | str]:
+    admin = await database.adminUsers.find_one({"_id": adminEmail, "email": adminEmail, "role": "admin"}, {"_id": 1})
+    authenticated = await authenticatedAdminEmail(database, request)
+    return {"configured": bool(admin), "authenticated": authenticated == adminEmail, "email": adminEmail}
 
 
 @app.post("/api/admin/bootstrap")
 async def bootstrapAdmin(
-    payload: PinInput,
-    request: Request,
+    payload: AdminCredentials,
     response: Response,
     database: AsyncIOMotorDatabase = Depends(database),
 ) -> dict[str, bool]:
-    settings = getSettings()
-    if str(settings["adminBootstrapIp"]) != getClientIp(request):
-        assertAllowedIp(request)
-    existing = await database.adminConfig.find_one({"key": "pin"})
-    if existing:
-        raise HTTPException(status_code=409, detail="admin pin already exists")
-    await database.adminConfig.insert_one({"key": "pin", "pinHash": hashPin(payload.pin), "createdAt": datetime.now(UTC)})
-    token = await createSession(database, request)
-    response.set_cookie("adminSession", token, httponly=True, secure=True, samesite="lax", max_age=60 * 60 * 24 * 30)
+    if payload.email != adminEmail:
+        raise HTTPException(status_code=403, detail=f"admin must use {adminEmail}")
+    if await database.adminUsers.count_documents({}) > 0:
+        raise HTTPException(status_code=409, detail="admin account already exists")
+
+    now = datetime.now(UTC)
+    try:
+        await database.adminUsers.insert_one(
+            {
+                "_id": adminEmail,
+                "email": adminEmail,
+                "passwordHash": hashPassword(payload.password),
+                "role": "admin",
+                "createdAt": now,
+                "updatedAt": now,
+            }
+        )
+    except DuplicateKeyError as error:
+        raise HTTPException(status_code=409, detail="admin account already exists") from error
+
+    await database.adminSessions.delete_many({})
+    token = await createSession(database, adminEmail)
+    setAdminSessionCookie(response, token)
     return {"ok": True}
 
 
 @app.post("/api/admin/login")
 async def loginAdmin(
-    payload: PinInput,
-    request: Request,
+    payload: AdminCredentials,
     response: Response,
     database: AsyncIOMotorDatabase = Depends(database),
 ) -> dict[str, bool]:
-    assertAllowedIp(request)
-    admin = await database.adminConfig.find_one({"key": "pin"})
-    if not admin or not verifyPin(payload.pin, admin["pinHash"]):
-        raise HTTPException(status_code=401, detail="invalid pin")
-    token = await createSession(database, request)
-    response.set_cookie("adminSession", token, httponly=True, secure=True, samesite="lax", max_age=60 * 60 * 24 * 30)
+    admin = await database.adminUsers.find_one({"_id": adminEmail, "email": adminEmail, "role": "admin"})
+    storedHash = str(admin.get("passwordHash", "")) if admin else ""
+    passwordMatches = verifyPassword(payload.password, storedHash)
+    if payload.email != adminEmail or not admin or not passwordMatches:
+        raise HTTPException(status_code=401, detail="invalid email or password")
+
+    token = await createSession(database, adminEmail)
+    setAdminSessionCookie(response, token)
     return {"ok": True}
 
 
@@ -192,7 +221,7 @@ async def logoutAdmin(request: Request, response: Response, database: AsyncIOMot
     token = request.cookies.get("adminSession")
     if token:
         await database.adminSessions.delete_one({"tokenHash": tokenHash(token)})
-    response.delete_cookie("adminSession")
+    response.delete_cookie("adminSession", path="/", secure=True, httponly=True, samesite="lax")
     return {"ok": True}
 
 

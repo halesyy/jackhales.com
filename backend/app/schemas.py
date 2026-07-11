@@ -3,8 +3,14 @@ from datetime import datetime
 from pydantic import BaseModel, Field, field_validator
 
 
-class PinInput(BaseModel):
-    pin: str = Field(min_length=6, max_length=128)
+class AdminCredentials(BaseModel):
+    email: str = Field(min_length=3, max_length=254)
+    password: str = Field(min_length=12, max_length=1024)
+
+    @field_validator("email")
+    @classmethod
+    def normalizeEmail(cls, value: str) -> str:
+        return value.strip().lower()
 
 
 class ArticleBase(BaseModel):
@@ -62,4 +68,3 @@ class ArticleSummary(BaseModel):
     publishedAt: datetime
     status: str
     updatedAt: datetime
-
