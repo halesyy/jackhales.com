@@ -11,8 +11,19 @@ from .auth_migration import applyPendingAuthMigration
 from .config import getSettings
 from .database import closeClient, ensureIndexes, getDatabase
 from .schemas import AdminCredentials, ArticleCreate, ArticleOut, ArticleSummary, ArticleUpdate
-from .security import adminEmail, authenticatedAdminEmail, createSession, getClientIp, hashPassword, requireAdmin, tokenHash, verifyPassword, viewIpHash
+from .security import (
+    adminEmail,
+    authenticatedAdminEmail,
+    createSession,
+    getClientIp,
+    hashPassword,
+    requireAdmin,
+    tokenHash,
+    verifyPassword,
+    viewIpHash,
+)
 from .seeding import applyPendingReseed, seedArticles
+from .sitemap import buildSitemap
 
 
 def slugify(value: str) -> str:
@@ -146,18 +157,15 @@ async def recordArticleView(request: Request, slug: str, database: AsyncIOMotorD
     return {"views": views, "counted": counted}
 
 
-@app.get("/api/sitemap")
-async def sitemap(database: AsyncIOMotorDatabase = Depends(database)) -> dict[str, list[str]]:
-    siteUrl = str(settings["publicSiteUrl"])
-    staticPaths = [
-        "",
-        "/articles",
-        "/background-and-experience",
-        "/software-engineers-guide-exploring-oman-top-travel-tips-itinerary",
-    ]
-    cursor = database.articles.find({"status": "published"}, {"slug": 1}).sort("publishedAt", -1)
-    articlePaths = [f"/article/{article['slug']}" async for article in cursor]
-    return {"urls": [f"{siteUrl}{path}" for path in [*staticPaths, *articlePaths]]}
+@app.get("/api/sitemap", response_class=Response)
+async def sitemap(database: AsyncIOMotorDatabase = Depends(database)) -> Response:
+    cursor = database.articles.find({"status": "published"}, {"slug": 1, "updatedAt": 1}).sort("publishedAt", -1)
+    articles = [article async for article in cursor]
+    return Response(
+        content=buildSitemap(str(settings["publicSiteUrl"]), articles),
+        media_type="application/xml",
+        headers={"Cache-Control": "public, max-age=300"},
+    )
 
 
 @app.get("/api/admin/status")
