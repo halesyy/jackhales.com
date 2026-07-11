@@ -7,7 +7,7 @@ services:
         BUILD_API_BASE_URL: ${BUILD_API_BASE_URL:-https://jackhales.jackhalestesting.xyz/api}
     environment:
       NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-/api}
-      INTERNAL_API_BASE_URL: http://jackhales-backend:8000/api
+      INTERNAL_API_BASE_URL: https://jackhales.jackhalestesting.xyz/api
       PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-https://jackhales.jackhalestesting.xyz}
     depends_on:
       backend:
@@ -27,7 +27,6 @@ services:
       - traefik.http.services.jackhales-frontend.loadbalancer.server.port=3000
     networks:
       - dokploy-network
-      - jackhales-private
     restart: unless-stopped
 
   backend:
@@ -57,10 +56,8 @@ services:
       - traefik.http.routers.jackhales-backend.tls.certresolver=letsencrypt
       - traefik.http.services.jackhales-backend.loadbalancer.server.port=8000
     networks:
-      dokploy-network:
-      jackhales-private:
-        aliases:
-          - jackhales-backend
+      - dokploy-network
+      - jackhales-private
     healthcheck:
       test:
         - CMD
