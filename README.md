@@ -1,6 +1,6 @@
-# jackhales.jackhalestesting.xyz
+# jackhales.com
 
-Minimal test rebuild of `jackhales.com` with:
+Jack Hales' personal site with:
 
 - Next.js pages-directory frontend
 - Tailwind CSS
@@ -44,6 +44,8 @@ The Sydney host also runs a pull-based systemd deploy timer. It pulls `main` fro
 IMAGE_TAG=local docker compose up -d --build --remove-orphans
 ```
 
-The remote host owns runtime secrets in `/srv/apps/jackhales-testing/.env`.
+The remote host owns runtime secrets in `/srv/apps/jackhales-testing/.env`. The existing server-side project identifier remains `jackhales-testing` so its MongoDB storage, private network, and deployment timer do not need a destructive rename during the public-domain migration.
+
+Production routing uses `jackhales.com` and `www.jackhales.com` for Next.js, with `www` redirected to the apex domain. `api.jackhales.com` routes to FastAPI. Traefik terminates TLS for all three hostnames with the shared `letsencrypt` certificate resolver.
 
 On a fresh deployment, `/admin` offers one-time account setup for `me@jackhales.com`. Passwords are stored as salted scrypt hashes; the plaintext password is never stored.

@@ -12,6 +12,6 @@ def getSettings() -> dict[str, object]:
         "mongodbUrl": os.environ.get("MONGODB_URL", "mongodb://localhost:27017"),
         "mongodbDatabase": os.environ.get("MONGODB_DATABASE", "jackhales"),
         "sessionSecret": os.environ.get("SESSION_SECRET", "local-dev-session-secret"),
-        "publicSiteUrl": os.environ.get("PUBLIC_SITE_URL", "https://jackhales.jackhalestesting.xyz").rstrip("/"),
+        "publicSiteUrl": os.environ.get("PUBLIC_SITE_URL", "https://jackhales.com").rstrip("/"),
         "corsOrigins": splitCsv(os.environ.get("CORS_ORIGINS", "")),
     }

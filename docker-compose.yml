@@ -1,14 +1,15 @@
 services:
   frontend:
-    image: ghcr.io/halesyy/jackhales-testing-frontend:${IMAGE_TAG:-latest}
+    image: ghcr.io/halesyy/jackhales-com-frontend:${IMAGE_TAG:-latest}
     build:
       context: ./frontend
       args:
-        BUILD_API_BASE_URL: ${BUILD_API_BASE_URL:-https://jackhales.jackhalestesting.xyz/api}
+        BUILD_API_BASE_URL: https://api.jackhales.com/api
+        NEXT_PUBLIC_API_BASE_URL: https://api.jackhales.com/api
     environment:
-      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-/api}
-      INTERNAL_API_BASE_URL: https://jackhales.jackhalestesting.xyz/api
-      PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-https://jackhales.jackhalestesting.xyz}
+      NEXT_PUBLIC_API_BASE_URL: https://api.jackhales.com/api
+      INTERNAL_API_BASE_URL: https://api.jackhales.com/api
+      PUBLIC_SITE_URL: https://jackhales.com
     depends_on:
       backend:
         condition: service_healthy
@@ -17,20 +18,39 @@ services:
       - traefik.docker.network=dokploy-network
       - traefik.http.middlewares.jackhales-https-redirect.redirectscheme.scheme=https
       - traefik.http.middlewares.jackhales-https-redirect.redirectscheme.permanent=true
-      - traefik.http.routers.jackhales-frontend-web.rule=Host(`jackhales.jackhalestesting.xyz`)
+      - traefik.http.middlewares.jackhales-www-redirect.redirectregex.regex=^https?://www\.jackhales\.com/(.*)
+      - traefik.http.middlewares.jackhales-www-redirect.redirectregex.replacement=https://jackhales.com/$${1}
+      - traefik.http.middlewares.jackhales-www-redirect.redirectregex.permanent=true
+      - traefik.http.middlewares.jackhales-legacy-redirect.redirectregex.regex=^https?://jackhales\.jackhalestesting\.xyz/(.*)
+      - traefik.http.middlewares.jackhales-legacy-redirect.redirectregex.replacement=https://jackhales.com/$${1}
+      - traefik.http.middlewares.jackhales-legacy-redirect.redirectregex.permanent=true
+      - traefik.http.routers.jackhales-frontend-web.rule=Host(`jackhales.com`) || Host(`www.jackhales.com`)
       - traefik.http.routers.jackhales-frontend-web.entrypoints=web
       - traefik.http.routers.jackhales-frontend-web.middlewares=jackhales-https-redirect
-      - traefik.http.routers.jackhales-frontend.rule=Host(`jackhales.jackhalestesting.xyz`)
+      - traefik.http.routers.jackhales-frontend-web.service=jackhales-frontend
+      - traefik.http.routers.jackhales-frontend.rule=Host(`jackhales.com`) || Host(`www.jackhales.com`)
       - traefik.http.routers.jackhales-frontend.entrypoints=websecure
+      - traefik.http.routers.jackhales-frontend.middlewares=jackhales-www-redirect
       - traefik.http.routers.jackhales-frontend.tls=true
       - traefik.http.routers.jackhales-frontend.tls.certresolver=letsencrypt
+      - traefik.http.routers.jackhales-frontend.service=jackhales-frontend
+      - traefik.http.routers.jackhales-legacy-web.rule=Host(`jackhales.jackhalestesting.xyz`)
+      - traefik.http.routers.jackhales-legacy-web.entrypoints=web
+      - traefik.http.routers.jackhales-legacy-web.middlewares=jackhales-legacy-redirect
+      - traefik.http.routers.jackhales-legacy-web.service=jackhales-frontend
+      - traefik.http.routers.jackhales-legacy.rule=Host(`jackhales.jackhalestesting.xyz`)
+      - traefik.http.routers.jackhales-legacy.entrypoints=websecure
+      - traefik.http.routers.jackhales-legacy.middlewares=jackhales-legacy-redirect
+      - traefik.http.routers.jackhales-legacy.tls=true
+      - traefik.http.routers.jackhales-legacy.tls.certresolver=letsencrypt
+      - traefik.http.routers.jackhales-legacy.service=jackhales-frontend
       - traefik.http.services.jackhales-frontend.loadbalancer.server.port=3000
     networks:
       - dokploy-network
     restart: unless-stopped
 
   backend:
-    image: ghcr.io/halesyy/jackhales-testing-backend:${IMAGE_TAG:-latest}
+    image: ghcr.io/halesyy/jackhales-com-backend:${IMAGE_TAG:-latest}
     build:
       context: ./backend
     env_file:
@@ -39,19 +59,31 @@ services:
       MONGODB_URL: ${MONGODB_URL}
       MONGODB_DATABASE: ${MONGODB_DATABASE:-jackhales}
       SESSION_SECRET: ${SESSION_SECRET}
-      PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-https://jackhales.jackhalestesting.xyz}
+      PUBLIC_SITE_URL: https://jackhales.com
+      CORS_ORIGINS: https://jackhales.com,https://www.jackhales.com
     labels:
       - traefik.enable=true
       - traefik.docker.network=dokploy-network
-      - traefik.http.routers.jackhales-backend-web.rule=Host(`jackhales.jackhalestesting.xyz`) && PathPrefix(`/api`)
-      - traefik.http.routers.jackhales-backend-web.priority=100
+      - traefik.http.routers.jackhales-backend-web.rule=Host(`api.jackhales.com`)
       - traefik.http.routers.jackhales-backend-web.entrypoints=web
       - traefik.http.routers.jackhales-backend-web.middlewares=jackhales-https-redirect
-      - traefik.http.routers.jackhales-backend.rule=Host(`jackhales.jackhalestesting.xyz`) && PathPrefix(`/api`)
-      - traefik.http.routers.jackhales-backend.priority=100
+      - traefik.http.routers.jackhales-backend-web.service=jackhales-backend
+      - traefik.http.routers.jackhales-backend.rule=Host(`api.jackhales.com`)
       - traefik.http.routers.jackhales-backend.entrypoints=websecure
       - traefik.http.routers.jackhales-backend.tls=true
       - traefik.http.routers.jackhales-backend.tls.certresolver=letsencrypt
+      - traefik.http.routers.jackhales-backend.service=jackhales-backend
+      - traefik.http.routers.jackhales-legacy-backend-web.rule=Host(`jackhales.jackhalestesting.xyz`) && PathPrefix(`/api`)
+      - traefik.http.routers.jackhales-legacy-backend-web.priority=100
+      - traefik.http.routers.jackhales-legacy-backend-web.entrypoints=web
+      - traefik.http.routers.jackhales-legacy-backend-web.middlewares=jackhales-https-redirect
+      - traefik.http.routers.jackhales-legacy-backend-web.service=jackhales-backend
+      - traefik.http.routers.jackhales-legacy-backend.rule=Host(`jackhales.jackhalestesting.xyz`) && PathPrefix(`/api`)
+      - traefik.http.routers.jackhales-legacy-backend.priority=100
+      - traefik.http.routers.jackhales-legacy-backend.entrypoints=websecure
+      - traefik.http.routers.jackhales-legacy-backend.tls=true
+      - traefik.http.routers.jackhales-legacy-backend.tls.certresolver=letsencrypt
+      - traefik.http.routers.jackhales-legacy-backend.service=jackhales-backend
       - traefik.http.services.jackhales-backend.loadbalancer.server.port=8000
     networks:
       - dokploy-network
