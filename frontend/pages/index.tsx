@@ -6,12 +6,13 @@ import {
   BrainCircuit,
   BriefcaseBusiness,
   Code2,
+  Compass,
   Github,
   Linkedin,
   MapPin,
   Music2,
   Network,
-  Telescope,
+  Radio,
 } from "lucide-react";
 import Head from "next/head";
 import Image from "next/image";
@@ -60,7 +61,11 @@ const projects = [
   },
 ];
 
-const skills = ["AI workflows", "LangChain", "LLM APIs", "Python", "TypeScript", "Next.js", "FastAPI", "MongoDB", "Docker", "AWS"];
+const skillGroups = [
+  { label: "Intelligence", skills: ["AI workflows", "LangChain", "LLM APIs"] },
+  { label: "Applications", skills: ["TypeScript", "Next.js", "Python", "FastAPI"] },
+  { label: "Data & delivery", skills: ["MongoDB", "Docker", "AWS"] },
+];
 
 export default function HomePage() {
   return (
@@ -72,7 +77,6 @@ export default function HomePage() {
 
       <section className="home-hero">
         <Reveal className="hero-copy">
-          <div className="availability"><span /> Focused on applied AI systems</div>
           <p className="eyebrow">AI engineer · Systems thinker</p>
           <h1 className="display-title">
             I build useful systems from <span className="accent">complex ideas.</span>
@@ -101,9 +105,6 @@ export default function HomePage() {
               </div>
               <Link href="/article/prime-number-research-2024" aria-label="Read prime number research" className="round-link"><ArrowUpRight size={18} /></Link>
             </div>
-          </MotionDiv>
-          <MotionDiv className="floating-note" animate={{ y: [0, -7, 0] }} transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}>
-            <Telescope size={16} /> Curious by default
           </MotionDiv>
         </Reveal>
       </section>
@@ -161,32 +162,59 @@ export default function HomePage() {
         </Stagger>
       </section>
 
-      <section className="section-block bento-grid">
-        <Reveal className="bento-card card bento-skills">
-          <div className="bento-title"><span className="icon-tile icon-blue"><Boxes size={21} /></span><div><p className="eyebrow">Technical toolkit</p><h3>Tools follow the problem.</h3></div></div>
-          <p className="bento-body">A pragmatic mix of typed application development, data systems, cloud platforms and automation.</p>
-          <div className="tag-list">{skills.map((skill) => <span className="tag" key={skill}>{skill}</span>)}</div>
+      <section className="section-block">
+        <Reveal className="section-heading bento-section-heading">
+          <div><p className="eyebrow">Working set</p><h2>Tools, interests & places to follow.</h2></div>
+          <p>A compact view of what I build with, what keeps me curious and where I share the work.</p>
         </Reveal>
 
-        <Reveal className="bento-card card bento-interests" delay={0.08}>
-          <p className="eyebrow">Beyond the screen</p>
-          <h3>Good software starts with a wider world.</h3>
-          <div className="interest-list">
-            <span><BookOpen size={17} /> History & reading</span>
-            <span><Music2 size={17} /> Music</span>
-            <span><MapPin size={17} /> Travel & bush walks</span>
-          </div>
-          <Link href="/software-engineers-guide-exploring-oman-top-travel-tips-itinerary" className="text-link">Read my Oman guide <ArrowRight size={15} /></Link>
-        </Reveal>
+        <div className="bento-grid">
+          <Reveal className="bento-card card bento-interests">
+            <div className="bento-card-header">
+              <span className="icon-tile icon-peach"><Compass size={21} /></span>
+              <p className="eyebrow">Beyond the screen</p>
+            </div>
+            <h3>Good software starts with a wider world.</h3>
+            <div className="interest-list">
+              <span><BookOpen size={18} /> History & reading</span>
+              <span><Music2 size={18} /> Music</span>
+              <span><MapPin size={18} /> Travel & bush walks</span>
+            </div>
+            <Link href="/software-engineers-guide-exploring-oman-top-travel-tips-itinerary" className="bento-card-link">Read my Oman guide <ArrowRight size={15} /></Link>
+          </Reveal>
 
-        <Reveal className="bento-card card bento-social" delay={0.16}>
-          <p className="eyebrow">Find me online</p>
-          <div className="social-links">
-            <a href="https://www.linkedin.com/in/jackhales/" target="_blank" rel="noreferrer"><Linkedin size={20} /><span>LinkedIn<small>Professional updates</small></span><ArrowUpRight size={16} /></a>
-            <a href="https://github.com/halesyy/" target="_blank" rel="noreferrer"><Github size={20} /><span>GitHub<small>Code & experiments</small></span><ArrowUpRight size={16} /></a>
-            <Link href="/articles"><BriefcaseBusiness size={20} /><span>Writing<small>Research & ideas</small></span><ArrowUpRight size={16} /></Link>
-          </div>
-        </Reveal>
+          <Reveal className="bento-card card bento-social" delay={0.08}>
+            <div className="bento-card-header">
+              <span className="icon-tile icon-mint"><Radio size={21} /></span>
+              <p className="eyebrow">Find me online</p>
+            </div>
+            <h3>Follow the work as it develops.</h3>
+            <div className="social-links">
+              <a href="https://www.linkedin.com/in/jackhales/" target="_blank" rel="noreferrer"><Linkedin size={20} /><span>LinkedIn<small>Professional updates</small></span><ArrowUpRight size={16} /></a>
+              <a href="https://github.com/halesyy/" target="_blank" rel="noreferrer"><Github size={20} /><span>GitHub<small>Code & experiments</small></span><ArrowUpRight size={16} /></a>
+              <Link href="/articles"><BriefcaseBusiness size={20} /><span>Writing<small>Research & ideas</small></span><ArrowUpRight size={16} /></Link>
+            </div>
+          </Reveal>
+
+          <Reveal className="bento-card card bento-skills" delay={0.16}>
+            <div className="bento-skills-copy">
+              <div className="bento-card-header">
+                <span className="icon-tile icon-blue"><Boxes size={21} /></span>
+                <p className="eyebrow">Technical toolkit</p>
+              </div>
+              <h3>Tools follow the problem.</h3>
+              <p className="bento-body">A pragmatic mix of typed application development, data systems, cloud platforms and automation.</p>
+            </div>
+            <div className="skill-groups">
+              {skillGroups.map((group) => (
+                <div className="skill-group" key={group.label}>
+                  <p>{group.label}</p>
+                  <div className="tag-list">{group.skills.map((skill) => <span className="tag" key={skill}>{skill}</span>)}</div>
+                </div>
+              ))}
+            </div>
+          </Reveal>
+        </div>
       </section>
     </SiteShell>
   );
