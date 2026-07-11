@@ -14,18 +14,38 @@ async function parseJson<T>(response: Response): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+async function fetchApi(path: string, init?: RequestInit): Promise<Response> {
+  const attempts = typeof window === "undefined" ? 4 : 1;
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const response = await fetch(`${apiBaseUrl()}${path}`, init);
+      if (response.status < 500 || attempt === attempts) return response;
+      lastError = new Error(`API request failed: ${response.status}`);
+    } catch (error) {
+      lastError = error;
+      if (attempt === attempts) throw error;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, attempt * 250));
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("API request failed");
+}
+
 export async function fetchArticles(): Promise<articleSummary[]> {
-  const response = await fetch(`${apiBaseUrl()}/articles`, { credentials: "include" });
+  const response = await fetchApi("/articles", { credentials: "include" });
   return parseJson<articleSummary[]>(response);
 }
 
 export async function fetchArticle(slug: string): Promise<articleDetail> {
-  const response = await fetch(`${apiBaseUrl()}/articles/${slug}`, { credentials: "include" });
+  const response = await fetchApi(`/articles/${slug}`, { credentials: "include" });
   return parseJson<articleDetail>(response);
 }
 
 export async function recordArticleView(slug: string): Promise<articleViewCount> {
-  const response = await fetch(`${apiBaseUrl()}/articles/${encodeURIComponent(slug)}/views`, {
+  const response = await fetchApi(`/articles/${encodeURIComponent(slug)}/views`, {
     method: "POST",
     credentials: "include",
   });
@@ -33,7 +53,7 @@ export async function recordArticleView(slug: string): Promise<articleViewCount>
 }
 
 export async function adminFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${apiBaseUrl()}${path}`, {
+  const response = await fetchApi(path, {
     credentials: "include",
     headers: { "content-type": "application/json", ...(init?.headers || {}) },
     ...init,

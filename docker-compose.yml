@@ -10,7 +10,8 @@ services:
       INTERNAL_API_BASE_URL: ${INTERNAL_API_BASE_URL:-http://backend:8000/api}
       PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-https://jackhales.jackhalestesting.xyz}
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     labels:
       - traefik.enable=true
       - traefik.docker.network=dokploy-network
@@ -57,6 +58,19 @@ services:
     networks:
       - dokploy-network
       - jackhales-private
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import json, urllib.request;
+          payload = json.load(urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3));
+          assert payload == {'status': 'ok', 'database': 'ok'}
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
     restart: unless-stopped
 
 networks:

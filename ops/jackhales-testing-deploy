@@ -3,6 +3,7 @@ set -euo pipefail
 
 repo_dir=/srv/apps/jackhales-testing/repo
 state_file=/srv/apps/jackhales-testing/.last-deployed-sha
+reseed_token_file=ops/reseed-articles.once
 
 cd "$repo_dir"
 
@@ -23,4 +24,43 @@ ln -sfn ../.env .env
 
 IMAGE_TAG=local docker compose up -d --build --remove-orphans
 IMAGE_TAG=local docker compose ps
+
+backend_id="$(IMAGE_TAG=local docker compose ps -q backend)"
+backend_health=""
+for _ in $(seq 1 60); do
+  backend_health="$(docker inspect --format '{{.State.Health.Status}}' "$backend_id" 2>/dev/null || true)"
+  if [[ "$backend_health" == "healthy" ]]; then
+    break
+  fi
+  sleep 2
+done
+
+if [[ "$backend_health" != "healthy" ]]; then
+  echo "Backend did not become healthy; refusing to finalize deployment." >&2
+  IMAGE_TAG=local docker compose ps >&2
+  exit 1
+fi
+
+if [[ -f "$reseed_token_file" ]]; then
+  reseed_token="$(tr -d '[:space:]' < "$reseed_token_file")"
+  if [[ ! "$reseed_token" =~ ^[a-zA-Z0-9._-]+$ ]]; then
+    echo "Invalid reseed token." >&2
+    exit 1
+  fi
+
+  reseed_marker="/srv/apps/jackhales-testing/.reseed-articles-$reseed_token"
+  if [[ ! -f "$reseed_marker" ]]; then
+    backup_dir=/srv/apps/jackhales-testing/backups
+    backup_file="$backup_dir/articles-before-$reseed_token.json"
+    mkdir -p "$backup_dir"
+    umask 077
+    IMAGE_TAG=local docker compose exec -T backend python -m app.reseed_articles backup > "$backup_file"
+    IMAGE_TAG=local docker compose exec -T backend python -m app.reseed_articles apply
+    printf '%s\n' "$remote_sha" > "$reseed_marker"
+    echo "Article reseed completed; backup stored at $backup_file"
+  else
+    echo "Article reseed already completed for token $reseed_token"
+  fi
+fi
+
 printf '%s\n' "$remote_sha" > "$state_file"

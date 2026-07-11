@@ -1,18 +1,17 @@
-import json
 import re
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
-from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorDatabase
-from pymongo.errors import DuplicateKeyError
+from pymongo.errors import DuplicateKeyError, PyMongoError
 
 from .config import getSettings
 from .database import closeClient, ensureIndexes, getDatabase
 from .schemas import ArticleCreate, ArticleOut, ArticleSummary, ArticleUpdate, PinInput
 from .security import assertAllowedIp, createSession, getClientIp, hashPin, isAllowedIp, requireAdmin, tokenHash, verifyPin, viewIpHash
+from .seeding import seedArticles
 
 
 def slugify(value: str) -> str:
@@ -41,21 +40,6 @@ def serializeSummary(document: dict) -> dict:
     article.pop("sourceUrl", None)
     article.pop("createdAt", None)
     return article
-
-
-async def seedArticles(database: AsyncIOMotorDatabase) -> None:
-    if await database.articles.estimated_document_count() > 0:
-        return
-    seedPath = Path(__file__).resolve().parent.parent / "seed" / "articles.json"
-    articles = json.loads(seedPath.read_text())
-    now = datetime.now(UTC)
-    for article in articles:
-        article["slug"] = slugify(article["slug"])
-        article["publishedAt"] = datetime.fromisoformat(article["publishedAt"].replace("Z", "+00:00"))
-        article["createdAt"] = now
-        article["updatedAt"] = now
-    if articles:
-        await database.articles.insert_many(articles)
 
 
 @asynccontextmanager
@@ -88,8 +72,12 @@ async def adminOnly(request: Request, database: AsyncIOMotorDatabase = Depends(d
 
 
 @app.get("/api/health")
-async def health() -> dict[str, str]:
-    return {"status": "ok"}
+async def health(database: AsyncIOMotorDatabase = Depends(database)) -> dict[str, str]:
+    try:
+        await database.command("ping")
+    except PyMongoError as error:
+        raise HTTPException(status_code=503, detail="database unavailable") from error
+    return {"status": "ok", "database": "ok"}
 
 
 @app.get("/api/articles", response_model=list[ArticleSummary])
