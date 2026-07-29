@@ -109,16 +109,12 @@ export default function AiAssistedPage() {
           explained how: he refused to let any hour go unused, and he never travelled without someone to take down what he said.
         </p>
         <blockquote className="ai-quote-block">
-          <p lang="la">
-            In itinere quasi solutus ceteris curis, huic uni vacabat: ad latus notarius cum libro et pugillaribus, cuius manus hieme
-            manicis muniebantur, ut ne caeli quidem asperitas ullum studii tempus eriperet.
-          </p>
           <p>
             On the road, as though released from every other concern, he gave himself to this alone: at his side a shorthand writer with
             book and tablets, whose hands were wrapped against the cold in winter, so that not even bitter weather could steal an hour
             of study.
           </p>
-          <cite>Pliny the Younger, <em>Letters</em> 3.5 — my rendering of the Latin</cite>
+          <cite>Pliny the Younger, <em>Letters</em> 3.5</cite>
         </blockquote>
         <p>
           He was carried through Rome in a chair for the same reason, and once scolded his nephew for going on foot: those hours could

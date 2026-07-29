@@ -742,8 +742,7 @@ textarea:focus {
 .ai-quote-lead { font-size: 1rem !important; }
 .ai-quote-close { padding-top: 1.3rem; border-top: 1px solid var(--line); }
 .ai-quote-block { max-width: 760px; margin: 2rem 0; padding: 1.6rem 1.8rem; border-left: 3px solid var(--blue); border-radius: 0 1rem 1rem 0; background: rgba(255,255,255,.62); }
-.ai-quote-block p[lang="la"] { margin-bottom: 1.1rem !important; color: var(--ink) !important; font-size: .95rem !important; font-style: italic; line-height: 1.75; }
-.ai-quote-block p { margin-bottom: 1.1rem !important; }
+.ai-quote-block p { margin-bottom: 1.1rem !important; color: var(--ink) !important; font-size: .98rem !important; line-height: 1.8; }
 .ai-quote-block cite { display: block; color: #8a9490; font-size: .72rem; font-style: normal; font-weight: 700; letter-spacing: .02em; }
 
 .ai-mechanics { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 1rem; }
