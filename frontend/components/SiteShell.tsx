@@ -5,6 +5,7 @@ import { useRouter } from "next/router";
 import type { ReactNode } from "react";
 
 import { Reveal } from "./Motion";
+import { SubscribeCard } from "./SubscribeCard";
 
 type siteShellProps = {
   children: ReactNode;
@@ -52,6 +53,9 @@ export function SiteShell({ children }: siteShellProps) {
       <main className="relative z-10 mx-auto w-full max-w-6xl px-5 pb-20 pt-10 sm:px-8 sm:pt-14">{children}</main>
 
       <footer className="relative z-10 mx-auto w-full max-w-6xl px-5 pb-8 sm:px-8">
+        <Reveal>
+          <SubscribeCard />
+        </Reveal>
         <Reveal>
           <div className="footer-card">
             <div>

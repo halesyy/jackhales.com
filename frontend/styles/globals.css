@@ -481,6 +481,7 @@ textarea:focus {
 .icon-blue { background: var(--blue-soft); color: var(--blue); }
 .icon-peach { background: var(--peach); }
 .icon-mint { background: var(--mint); }
+.icon-yellow { background: var(--yellow); }
 
 .project-grid {
   display: grid;
@@ -805,7 +806,7 @@ textarea:focus {
 .admin-heading > div:first-child > p:last-child { max-width: 620px; margin: 0; color: var(--muted); font-size: .86rem; line-height: 1.6; }
 .admin-heading-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .65rem; }
 
-.admin-stats { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: .8rem; margin-bottom: .8rem; }
+.admin-stats { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: .8rem; margin-bottom: .8rem; }
 .admin-stat { display: flex; align-items: center; gap: 1rem; padding: 1rem; }
 .admin-stat strong, .admin-stat small { display: block; }
 .admin-stat strong { font-size: 1.5rem; letter-spacing: -.04em; }
@@ -851,6 +852,30 @@ textarea:focus {
 .api-key-actions label { display: flex; flex: 1 1 200px; flex-direction: column; gap: .4rem; color: #41504a; font-size: .68rem; font-weight: 750; }
 .api-key-actions input { width: 100%; min-height: 2.7rem; border: 1px solid var(--line); padding: .6rem .8rem; background: rgba(255,255,255,.8); font-size: .8rem; }
 .api-key-actions .button:disabled { cursor: not-allowed; opacity: .45; transform: none; }
+
+.subscribers-panel { margin-top: .8rem; padding: 1.35rem; }
+.subscribers-heading { display: grid; grid-template-columns: auto minmax(0,1fr); align-items: center; gap: 1rem; }
+.subscribers-heading h2 { margin: 0; font-size: 1.15rem; letter-spacing: -.035em; }
+.subscribers-heading p { margin: .25rem 0 0; color: var(--muted); font-size: .72rem; line-height: 1.5; }
+
+/* A real table, unlike the div-row lists elsewhere on this page: five genuinely tabular columns read
+   better with proper header cells, and the wrapper scrolls horizontally on narrow screens instead of
+   squeezing (or dropping) a column. */
+.subscribers-list-wrap { margin-top: 1.1rem; max-height: 24rem; overflow: auto; border: 1px solid var(--line); border-radius: 1rem; }
+.subscribers-table { width: 100%; min-width: 640px; border-collapse: collapse; font-size: .78rem; }
+.subscribers-table th, .subscribers-table td { padding: .8rem 1rem; text-align: left; }
+.subscribers-table thead th { position: sticky; top: 0; z-index: 1; color: var(--muted); font-size: .62rem; font-weight: 750; letter-spacing: .06em; text-transform: uppercase; background: rgba(250,250,247,.96); border-bottom: 1px solid var(--line); backdrop-filter: blur(6px); }
+.subscribers-table tbody tr { background: rgba(255,255,255,.4); border-bottom: 1px solid var(--line); transition: background 180ms ease; }
+.subscribers-table tbody tr:last-child { border-bottom: 0; }
+.subscribers-table tbody tr:hover { background: rgba(255,255,255,.8); }
+.subscribers-table td { color: var(--ink); vertical-align: middle; }
+.subscriber-email { display: block; overflow: hidden; max-width: 260px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.subscriber-name-empty { color: #9ba39f; }
+/* Unsubscribed records are kept so churn stays visible, so the list has to say which ones they are. */
+.subscribers-table tr.subscriber-inactive td { color: #9ba39f; }
+.subscribers-table tr.subscriber-inactive .subscriber-email { font-weight: 550; text-decoration: line-through; }
+.subscriber-status-tag { display: inline-block; margin-top: .3rem; padding: .1rem .45rem; border-radius: .4rem; color: #9d332a; background: #fbe9e6; font-size: .6rem; font-weight: 750; letter-spacing: .04em; text-transform: uppercase; }
+.subscribers-meta-cell { color: var(--muted); font-size: .72rem; font-weight: 600; white-space: nowrap; }
 
 .article-editor-shell { padding: clamp(1rem,3vw,2rem); }
 .article-editor-intro { display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; padding-bottom: 1.5rem; border-bottom: 1px solid var(--line); }
@@ -977,12 +1002,157 @@ textarea:focus {
 .book-copy > p:not(.eyebrow):not(.book-author) { max-width: 620px; color: var(--muted); line-height: 1.75; }
 .book-mark { display: inline-flex; align-items: center; gap: .45rem; margin-top: 1.5rem; color: #716043; font-size: .72rem; font-weight: 700; }
 
+.subscribe-card {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+  margin-top: 3.5rem;
+  padding: clamp(1.35rem, 3vw, 1.9rem);
+}
+
+.subscribe-copy h2 {
+  margin: 0.4rem 0 0;
+  font-size: clamp(1.2rem, 2.3vw, 1.55rem);
+  letter-spacing: -0.03em;
+  line-height: 1.25;
+}
+
+.subscribe-lead {
+  margin: 0.45rem 0 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.6;
+}
+
+/* Reserved to one input row so the checking → idle transition on mount never shifts the footer.
+   Growing into the subscribed state is a direct response to the visitor's own click, so that one is
+   theirs to expect rather than jank to design around. */
+.subscribe-body {
+  display: flex;
+  min-height: 2.75rem;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.55rem;
+}
+
+.subscribe-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.subscribe-field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.subscribe-field input {
+  width: 100%;
+  min-height: 2.75rem;
+  border: 1px solid var(--line);
+  padding: 0.65rem 0.85rem;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.8);
+  font-size: 0.84rem;
+}
+
+.subscribe-field input::placeholder {
+  color: #8a9490;
+}
+
+.subscribe-field input:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.subscribe-row .button {
+  white-space: nowrap;
+}
+
+.subscribe-row .button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  transform: none;
+}
+
+.subscribe-skeleton {
+  height: 2.75rem;
+  border-radius: 0.7rem;
+  background: linear-gradient(90deg, rgba(21, 35, 31, 0.05), rgba(21, 35, 31, 0.1), rgba(21, 35, 31, 0.05));
+  background-size: 200% 100%;
+  animation: subscribe-shimmer 1.6s ease-in-out infinite;
+}
+
+@keyframes subscribe-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.subscribe-confirmed {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.subscribe-confirmed-line {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0;
+  color: #17643e;
+  font-size: 0.84rem;
+  font-weight: 650;
+}
+
+.subscribe-confirmed-line svg {
+  flex: 0 0 auto;
+}
+
+.subscribe-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.subscribe-note-muted {
+  color: #8a9490;
+}
+
+.subscribe-leave {
+  margin-left: 0.6rem;
+  padding: 0;
+  border: 0;
+  color: var(--muted);
+  background: none;
+  font-size: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.subscribe-leave:hover:not(:disabled),
+.subscribe-leave:focus-visible {
+  color: #9d332a;
+}
+
+.subscribe-leave:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.subscribe-error {
+  margin: 0;
+  color: #9d332a;
+  font-size: 0.76rem;
+}
+
 .footer-card {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 2rem;
-  margin-top: 5rem;
+  margin-top: 1.4rem;
   padding: clamp(1.6rem, 4vw, 3rem);
   border-radius: 1.7rem;
   color: white;
@@ -1116,6 +1286,9 @@ textarea:focus {
     flex-direction: column;
   }
 
+  .subscribe-row { grid-template-columns: 1fr; }
+  .subscribe-row .button { width: 100%; }
+
   .footer-actions {
     width: 100%;
     align-items: flex-start;
@@ -1148,7 +1321,7 @@ textarea:focus {
   .book-copy { padding: 1rem .6rem 1.4rem; }
   .admin-heading { align-items: flex-start; flex-direction: column; }
   .admin-heading-actions { width: 100%; justify-content: flex-start; }
-  .admin-stats { gap: .5rem; }
+  .admin-stats { grid-template-columns: repeat(2, minmax(0,1fr)); gap: .5rem; }
   .admin-stat { flex-direction: column; align-items: flex-start; gap: .6rem; padding: .8rem; }
   .admin-article-row { grid-template-columns: 1fr auto; gap: .65rem; }
   .admin-article-row .article-status { grid-column: 1; grid-row: 1; }
