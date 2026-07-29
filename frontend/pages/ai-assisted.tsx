@@ -1,4 +1,4 @@
-import { ArrowUpRight, Compass, FileLock2, PenLine, ScrollText, Sparkles, SplitSquareHorizontal, UserRound } from "lucide-react";
+import { ArrowUpRight, Compass, FileLock2, FlaskConical, PenLine, ScrollText, SplitSquareHorizontal, UserRound } from "lucide-react";
 import Head from "next/head";
 import Link from "next/link";
 
@@ -29,7 +29,7 @@ const never = [
 const parallel = [
   { icon: <Compass size={20} />, tone: "icon-blue", label: "Company building", copy: "The work that pays for the curiosity, and the one with real deadlines attached." },
   { icon: <SplitSquareHorizontal size={20} />, tone: "icon-mint", label: "Prime number research", copy: "A long-running exploration of structure and pattern that I have never been able to leave alone." },
-  { icon: <Sparkles size={20} />, tone: "icon-peach", label: "Experiments in AI", copy: "Agents, tooling and evaluation. Mostly built to find out where the idea breaks." },
+  { icon: <FlaskConical size={20} />, tone: "icon-peach", label: "Experiments in AI", copy: "Agents, tooling and evaluation. Mostly built to find out where the idea breaks." },
 ];
 
 export default function AiAssistedPage() {
@@ -52,7 +52,7 @@ export default function AiAssistedPage() {
 
       <Reveal className="page-hero page-hero-row">
         <div>
-          <p className="eyebrow eyebrow-icon"><Sparkles size={13} /> What the badge means</p>
+          <p className="eyebrow">What the badge means</p>
           <h1 className="display-title">Directed by me. <span className="accent">Written with help.</span></h1>
         </div>
         <p className="lead page-side-lead">

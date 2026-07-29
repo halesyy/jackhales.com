@@ -1,4 +1,4 @@
-import { ArrowUpRight, BookOpen, Clock3, Sparkles } from "lucide-react";
+import { ArrowUpRight, BookOpen, Clock3 } from "lucide-react";
 import Head from "next/head";
 import Link from "next/link";
 
@@ -40,7 +40,7 @@ export default function ArticlesPage({ articles }: articlesPageProps) {
         </div>
         <div className="page-side-lead">
           <p className="lead">Research journals, technical field notes and unfinished ideas. Written to clarify the thinking, not just present the answer.</p>
-          <Link href="/ai-assisted" className="side-lead-link"><Sparkles size={14} /> Why some of these say AI-assisted <ArrowUpRight size={14} /></Link>
+          <Link href="/ai-assisted" className="side-lead-link">Why some of these say AI-assisted <ArrowUpRight size={14} /></Link>
         </div>
       </Reveal>
 
@@ -52,7 +52,7 @@ export default function ArticlesPage({ articles }: articlesPageProps) {
               <div className="article-meta">
                 <span>{articleTheme(featured.title)}</span>
                 <span><Clock3 size={13} /> {formatDate(featured.publishedAt)}</span>
-                {featured.aiAssisted ? <span className="article-meta-ai"><Sparkles size={13} /> AI-assisted</span> : null}
+                {featured.aiAssisted ? <span className="article-meta-ai">AI-assisted</span> : null}
               </div>
               <h2>{featured.title}</h2>
               <p>{featured.summary}</p>
@@ -73,7 +73,7 @@ export default function ArticlesPage({ articles }: articlesPageProps) {
               <Link href={`/article/${article.slug}`} className={`article-card card card-interactive article-tone-${index % 3}`}>
                 <div className="article-card-top">
                   <span className="tag">{articleTheme(article.title)}</span>
-                  {article.aiAssisted ? <span className="tag tag-ai"><Sparkles size={12} /> AI-assisted</span> : null}
+                  {article.aiAssisted ? <span className="tag tag-ai">AI-assisted</span> : null}
                   <ArrowUpRight size={17} />
                 </div>
                 <h2>{article.title}</h2>

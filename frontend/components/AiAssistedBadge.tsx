@@ -1,4 +1,3 @@
-import { Sparkles } from "lucide-react";
 import Link from "next/link";
 
 type aiAssistedBadgeProps = {
@@ -12,7 +11,6 @@ export const aiAssistedTooltip =
 export function AiAssistedBadge({ variant = "byline" }: aiAssistedBadgeProps) {
   return (
     <Link href="/ai-assisted" className={`ai-badge ai-badge-${variant}`} aria-label={`AI-assisted. ${aiAssistedTooltip}`}>
-      <Sparkles size={13} aria-hidden="true" />
       <span>AI-assisted</span>
       <span className="ai-badge-tip" role="tooltip">
         {aiAssistedTooltip}

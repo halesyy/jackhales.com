@@ -723,8 +723,6 @@ textarea:focus {
 .article-deck { max-width: 710px; margin: 0 auto; color: var(--muted); font-size: clamp(1rem, 2vw, 1.22rem); line-height: 1.65; }
 .article-byline { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 1.2rem; margin-top: 1.7rem; color: #68746f; font-size: .72rem; font-weight: 650; }
 .article-byline span { display: inline-flex; align-items: center; gap: .4rem; }
-.eyebrow-icon { display: inline-flex; align-items: center; gap: .4rem; }
-
 .side-lead-link { display: inline-flex; align-items: center; gap: .4rem; margin-top: 1rem; color: var(--blue); font-size: .76rem; font-weight: 700; }
 .side-lead-link:hover { text-decoration: underline; text-underline-offset: .25rem; }
 
