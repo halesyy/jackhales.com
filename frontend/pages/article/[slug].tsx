@@ -4,6 +4,7 @@ import Head from "next/head";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { AiAssistedBadge } from "../../components/AiAssistedBadge";
 import { MarkdownContent } from "../../components/MarkdownContent";
 import { Reveal } from "../../components/Motion";
 import { SiteShell } from "../../components/SiteShell";
@@ -88,6 +89,7 @@ export default function ArticlePage({ article }: articlePageProps) {
           <span><UserRound size={15} /> Jack Hales</span>
           <span><CalendarDays size={15} /> {formatDate(article.publishedAt)}</span>
           <span aria-live="polite"><Eye size={15} /> {views === null ? "Loading views" : `${views.toLocaleString()} ${views === 1 ? "view" : "views"}`}</span>
+          {article.aiAssisted ? <AiAssistedBadge /> : null}
         </div>
       </Reveal>
 

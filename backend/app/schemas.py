@@ -4,6 +4,9 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 publicationFields = ("status", "publish", "published", "publishedState")
+# The API sets this itself on every key-authenticated write, so a key may not
+# declare it — an agent must not be able to hide or claim its own involvement.
+automaticFields = ("aiAssisted",)
 maxKeywords = 25
 
 
@@ -75,6 +78,7 @@ class ArticleBase(BaseModel):
     bodyMarkdown: str = Field(default="")
     publishedAt: datetime
     status: str = Field(default="draft", pattern="^(draft|published)$")
+    aiAssisted: bool = False
     seo: ArticleSeo = Field(default_factory=ArticleSeo)
     heroImage: ArticleImage | None = None
 
@@ -95,6 +99,7 @@ class ArticleUpdate(BaseModel):
     bodyMarkdown: str | None = None
     publishedAt: datetime | None = None
     status: str | None = Field(default=None, pattern="^(draft|published)$")
+    aiAssisted: bool | None = None
     seo: ArticleSeo | None = None
     heroImage: ArticleImage | None = None
 
@@ -120,6 +125,7 @@ class ArticleSummary(BaseModel):
     summary: str
     publishedAt: datetime
     status: str
+    aiAssisted: bool = False
     updatedAt: datetime
 
 
@@ -153,6 +159,9 @@ class DraftPayload(BaseModel):
             for field in publicationFields:
                 if field in data:
                     raise ValueError(f"'{field}' cannot be set with an API key; only the admin can publish an article")
+            for field in automaticFields:
+                if field in data:
+                    raise ValueError(f"'{field}' is recorded automatically on every API-key edit and cannot be set by hand")
         return data
 
 

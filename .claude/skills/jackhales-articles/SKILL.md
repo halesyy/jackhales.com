@@ -17,6 +17,13 @@ to every write — but do not go looking for a way around it. If the user asks t
 publish, tell them the change is saved as a draft and that publishing happens in
 `/admin`.
 
+## Every Edit Is Disclosed
+
+Any write you make sets `aiAssisted` on that article, and the site renders an
+AI-assisted badge linking to `/ai-assisted`. The field is refused in both
+directions, so it can be neither claimed nor suppressed. Say so when you first
+mark an article that was not previously marked, and never try to remove it.
+
 ## Resolve The Command
 
 ```sh

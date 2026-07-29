@@ -19,9 +19,11 @@ from app.main import (
     contentUpdateDraft,
     contentUpdateSection,
     contentWhoami,
+    updateArticle,
 )
 from app.schemas import (
     ArticleSeo,
+    ArticleUpdate,
     BodyReplace,
     DraftBody,
     DraftCreate,
@@ -210,6 +212,51 @@ class ContentApiTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(context.exception.status_code, 422)
         self.assertEqual((await database.articles.find_one({"slug": "draft-article"}))["bodyMarkdown"], draftBody)
+
+    async def testCreatedDraftsAreMarkedAsAiAssisted(self) -> None:
+        database, record = await seedDatabase()
+
+        created = await contentCreateDraft(DraftCreate(title="Written with help"), database, record)
+
+        self.assertTrue(created["aiAssisted"])
+
+    async def testEveryKeyWriteMarksAPreviouslyUnmarkedDraft(self) -> None:
+        writes = [
+            lambda database, record: contentUpdateDraft("draft-article", DraftUpdate(summary="New."), database, record),
+            lambda database, record: contentReplaceBody("draft-article", DraftBody(bodyMarkdown="New body."), database, record),
+            lambda database, record: contentReplaceText(
+                "draft-article", BodyReplace(find="Original findings.", replace="New."), database, record
+            ),
+            lambda database, record: contentUpdateSection(
+                "draft-article", "findings", SectionUpdate(body="New."), database, record
+            ),
+            lambda database, record: contentInsertSection(
+                "draft-article", SectionInsert(heading="Extra", after="findings"), database, record
+            ),
+            lambda database, record: contentDeleteSection("draft-article", "findings", database, record),
+        ]
+
+        for write in writes:
+            database, record = await seedDatabase()
+            self.assertFalse((await database.articles.find_one({"slug": "draft-article"})).get("aiAssisted", False))
+
+            result = await write(database, record)
+
+            self.assertTrue(result["aiAssisted"])
+
+    async def testAKeyCannotDeclareOrHideItsOwnInvolvement(self) -> None:
+        for payload in ({"title": "Mine alone", "aiAssisted": False}, {"aiAssisted": True}):
+            with self.assertRaises(ValidationError) as context:
+                DraftUpdate.model_validate(payload)
+            self.assertIn("recorded automatically", str(context.exception))
+
+    async def testTheAdminCanStillClearTheFlag(self) -> None:
+        database, record = await seedDatabase()
+        await contentUpdateDraft("draft-article", DraftUpdate(summary="Helped."), database, record)
+
+        cleared = await updateArticle("draft-article", ArticleUpdate(aiAssisted=False), database)
+
+        self.assertFalse(cleared["aiAssisted"])
 
     async def testMissingArticlesReturnNotFound(self) -> None:
         database, record = await seedDatabase()

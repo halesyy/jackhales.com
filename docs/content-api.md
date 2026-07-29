@@ -28,6 +28,7 @@ scripts/jackhales-content whoami      # ask the API what this key may do
 | Guardrail | Behaviour |
 | --- | --- |
 | Publication state | `status`, `publish`, `published`, `publishedState` are rejected by the request model with `422` |
+| AI attribution | `aiAssisted` is rejected with `422` and set to `true` by the API on every key-authenticated write |
 | Published articles | Every write route returns `409` and changes nothing |
 | Unknown fields | Rejected (`extra="forbid"`) rather than silently ignored |
 | Deletion | Articles cannot be deleted; only sections within a draft can |
@@ -90,6 +91,7 @@ including its blank-line spacing, is preserved byte for byte.
   "bodyMarkdown": "…",
   "publishedAt": "2026-07-29T00:00:00Z",
   "status": "draft",              // read-only for API keys
+  "aiAssisted": true,             // set by the API on every key write; not settable by a key
   "seo": {
     "metaTitle": null,            // falls back to the title
     "metaDescription": null,      // falls back to the summary
@@ -103,6 +105,18 @@ including its blank-line spacing, is preserved byte for byte.
 ```
 
 `PATCH` accepts `clearHeroImage: true` to remove the hero image.
+
+## AI Attribution
+
+Any write made with an API key sets `aiAssisted` to `true` on that article. The
+site renders it as an AI-assisted badge linking to
+[`/ai-assisted`](https://jackhales.com/ai-assisted), which explains that the
+direction, research and conclusions are Jack's and that AI helped with drafting
+and structuring.
+
+A key cannot send `aiAssisted` in either direction — attempting it is a `422`.
+Only the admin form can clear the flag, so assistance cannot quietly go
+unrecorded.
 
 ## Type Definitions
 

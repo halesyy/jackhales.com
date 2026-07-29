@@ -48,6 +48,10 @@ class SitemapTest(unittest.TestCase):
         self.assertEqual(len(locations), len(STATIC_PATHS) + 1)
         self.assertEqual(locations[0], "https://jackhales.com?preview=1&format=xml")
 
+    def testStandingPagesAreListed(self) -> None:
+        for path in ("/articles", "/background-and-experience", "/ai-assisted"):
+            self.assertIn(path, STATIC_PATHS)
+
 
 if __name__ == "__main__":
     unittest.main()

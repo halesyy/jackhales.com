@@ -1,4 +1,4 @@
-import { ArrowUpRight, BookOpen, Clock3 } from "lucide-react";
+import { ArrowUpRight, BookOpen, Clock3, Sparkles } from "lucide-react";
 import Head from "next/head";
 import Link from "next/link";
 
@@ -38,7 +38,10 @@ export default function ArticlesPage({ articles }: articlesPageProps) {
           <p className="eyebrow">Writing & research</p>
           <h1 className="display-title">Notes from the <span className="accent">workbench.</span></h1>
         </div>
-        <p className="lead page-side-lead">Research journals, technical field notes and unfinished ideas. Written to clarify the thinking, not just present the answer.</p>
+        <div className="page-side-lead">
+          <p className="lead">Research journals, technical field notes and unfinished ideas. Written to clarify the thinking, not just present the answer.</p>
+          <Link href="/ai-assisted" className="side-lead-link"><Sparkles size={14} /> Why some of these say AI-assisted <ArrowUpRight size={14} /></Link>
+        </div>
       </Reveal>
 
       {featured ? (
@@ -46,7 +49,11 @@ export default function ArticlesPage({ articles }: articlesPageProps) {
           <Link href={`/article/${featured.slug}`} className="featured-article card card-interactive">
             <div className="featured-art"><span>{articleTheme(featured.title)}</span><BookOpen size={54} /></div>
             <div className="featured-copy">
-              <div className="article-meta"><span>{articleTheme(featured.title)}</span><span><Clock3 size={13} /> {formatDate(featured.publishedAt)}</span></div>
+              <div className="article-meta">
+                <span>{articleTheme(featured.title)}</span>
+                <span><Clock3 size={13} /> {formatDate(featured.publishedAt)}</span>
+                {featured.aiAssisted ? <span className="article-meta-ai"><Sparkles size={13} /> AI-assisted</span> : null}
+              </div>
               <h2>{featured.title}</h2>
               <p>{featured.summary}</p>
               <strong>Read article <ArrowUpRight size={16} /></strong>
@@ -64,7 +71,11 @@ export default function ArticlesPage({ articles }: articlesPageProps) {
           {rest.map((article, index) => (
             <StaggerItem key={article.slug}>
               <Link href={`/article/${article.slug}`} className={`article-card card card-interactive article-tone-${index % 3}`}>
-                <div className="article-card-top"><span className="tag">{articleTheme(article.title)}</span><ArrowUpRight size={17} /></div>
+                <div className="article-card-top">
+                  <span className="tag">{articleTheme(article.title)}</span>
+                  {article.aiAssisted ? <span className="tag tag-ai"><Sparkles size={12} /> AI-assisted</span> : null}
+                  <ArrowUpRight size={17} />
+                </div>
                 <h2>{article.title}</h2>
                 <p>{article.summary}</p>
                 <time>{formatDate(article.publishedAt)}</time>

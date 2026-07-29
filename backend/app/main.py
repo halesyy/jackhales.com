@@ -85,6 +85,7 @@ def serializeArticle(document: dict) -> dict:
         "bodyMarkdown": document.get("bodyMarkdown", ""),
         "publishedAt": document["publishedAt"],
         "status": document.get("status", "draft"),
+        "aiAssisted": bool(document.get("aiAssisted", False)),
         "seo": serializeSeo(document.get("seo")),
         "heroImage": document.get("heroImage"),
         "sourceUrl": document.get("sourceUrl"),
@@ -168,12 +169,17 @@ async def loadEditableDraft(database: AsyncIOMotorDatabase, slug: str) -> dict:
     return article
 
 
+def recordAiAssistance(update: dict) -> dict:
+    """Every key-authenticated write marks the article, so the badge cannot be avoided."""
+    return {**update, "aiAssisted": True}
+
+
 async def saveBodyEdit(database: AsyncIOMotorDatabase, article: dict, edit) -> dict:
     try:
         bodyMarkdown = edit(article.get("bodyMarkdown", ""))
     except ContentEditError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
-    return await saveArticleUpdate(database, article, {"bodyMarkdown": bodyMarkdown})
+    return await saveArticleUpdate(database, article, recordAiAssistance({"bodyMarkdown": bodyMarkdown}))
 
 
 def setAdminSessionCookie(response: Response, token: str) -> None:
@@ -400,6 +406,7 @@ async def contentWhoami(record: dict = Depends(apiKeyOnly)) -> dict[str, object]
             "cannot publish or unpublish an article",
             "cannot modify an article whose status is published",
             "cannot delete articles",
+            "cannot set aiAssisted; every edit made with this key marks the article as AI-assisted",
         ],
     }
 
@@ -437,6 +444,7 @@ async def contentCreateDraft(
     document["slug"] = slugify(document.pop("slug", None) or document["title"])
     document["publishedAt"] = document.get("publishedAt") or now
     document["status"] = "draft"
+    document["aiAssisted"] = True
     document["createdAt"] = now
     document["updatedAt"] = now
     try:
@@ -461,7 +469,7 @@ async def contentUpdateDraft(
         update["heroImage"] = None
     if not update:
         raise HTTPException(status_code=422, detail="provide at least one field to update")
-    return await saveArticleUpdate(database, article, update)
+    return await saveArticleUpdate(database, article, recordAiAssistance(update))
 
 
 @app.put("/api/content/articles/{slug}/body", response_model=ArticleOut)

@@ -18,6 +18,7 @@ export type articlePayload = {
   bodyMarkdown: string;
   publishedAt: string;
   status: "draft" | "published";
+  aiAssisted: boolean;
   seo: articleSeo;
   heroImage: articleImage | null;
 };
@@ -45,6 +46,7 @@ export function ArticleForm({ article, mode, onSubmit, onCancel }: articleFormPr
   const [bodyMarkdown, setBodyMarkdown] = useState(article?.bodyMarkdown || "");
   const [publishedAt, setPublishedAt] = useState(article?.publishedAt.slice(0, 10) || new Date().toISOString().slice(0, 10));
   const [status, setStatus] = useState<"draft" | "published">(article?.status || "draft");
+  const [aiAssisted, setAiAssisted] = useState(article?.aiAssisted || false);
   const [metaTitle, setMetaTitle] = useState(article?.seo?.metaTitle || "");
   const [metaDescription, setMetaDescription] = useState(article?.seo?.metaDescription || "");
   const [canonicalUrl, setCanonicalUrl] = useState(article?.seo?.canonicalUrl || "");
@@ -98,6 +100,7 @@ export function ArticleForm({ article, mode, onSubmit, onCancel }: articleFormPr
         bodyMarkdown,
         publishedAt: isoFromInput(publishedAt),
         status: resolvedStatus,
+        aiAssisted,
         seo: {
           metaTitle: optionalText(metaTitle),
           metaDescription: optionalText(metaDescription),
@@ -154,6 +157,11 @@ export function ArticleForm({ article, mode, onSubmit, onCancel }: articleFormPr
             <option value="draft">Draft</option>
             <option value="published">Published</option>
           </select>
+        </label>
+
+        <label className="editor-field editor-checkbox editor-field-wide">
+          <input type="checkbox" checked={aiAssisted} onChange={(event) => setAiAssisted(event.target.checked)} />
+          <span>Show the AI-assisted badge. Set automatically whenever the article is edited with an API key.</span>
         </label>
       </div>
 

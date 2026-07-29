@@ -22,6 +22,8 @@ export type articleSummary = {
   summary: string;
   publishedAt: string;
   status: articleStatus;
+  /** Set automatically whenever the article is edited through an API key. */
+  aiAssisted: boolean;
   updatedAt: string;
 };
 
@@ -76,7 +78,7 @@ export type articleSectionList = {
   sections: articleSection[];
 };
 
-/** What an API key is allowed to do. Publishing is deliberately absent. */
+/** What an API key is allowed to do. Publishing and setting aiAssisted are deliberately absent. */
 export type contentIdentity = {
   authenticated: boolean;
   scope: string;

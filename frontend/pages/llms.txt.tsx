@@ -17,8 +17,9 @@ function articleLines(articles: articleSummary[]): string[] {
       const summary = oneLine(article.summary);
       const published = article.publishedAt.slice(0, 10);
       const description = summary || "A research note or working idea from Jack Hales.";
+      const assisted = article.aiAssisted ? " (AI-assisted drafting; direction, research and conclusions are Jack's)" : "";
 
-      return `- [${title}](${SITE_URL}/article/${encodeURIComponent(article.slug)}): ${description} (Published ${published})`;
+      return `- [${title}](${SITE_URL}/article/${encodeURIComponent(article.slug)}): ${description} (Published ${published})${assisted}`;
     });
 }
 
@@ -80,7 +81,17 @@ export function renderLlmsTxt(articles: articleSummary[]): string {
     `- [Home](${SITE_URL}): concise introduction, capabilities, current interests, and selected work.`,
     `- [Background and experience](${SITE_URL}/background-and-experience): detailed product work, technical toolkit, integrations, experiments, and working philosophy.`,
     `- [Writing and research](${SITE_URL}/articles): the current article archive.`,
+    `- [AI-assisted writing](${SITE_URL}/ai-assisted): what the AI-assisted badge means, why Jack writes this way, and the guardrails behind it.`,
     `- [Sitemap](${SITE_URL}/sitemap.xml): machine-readable index of public pages.`,
+    "",
+    "## How this writing is produced",
+    "",
+    `Some articles carry an [AI-assisted](${SITE_URL}/ai-assisted) badge. The badge means AI helped with drafting prose and breaking the content into sections. The questions, research, experiments, arguments, and conclusions are Jack's own, and every article is read and edited by him before it goes live.`,
+    "",
+    "- The badge is recorded automatically: any edit made through the site's scoped content API key marks that article as AI-assisted. The key cannot set or clear the flag itself.",
+    "- That key can only work on drafts. It cannot publish, cannot modify an already-published article, and cannot delete anything. Jack is the only one who publishes.",
+    "- Articles without the badge were written without AI assistance.",
+    "- The reason is capacity rather than preference: Jack runs company building, prime-number research, and AI experimentation in parallel, and would otherwise leave most of the research unwritten.",
     "",
     "## Writing and further reading",
     "",

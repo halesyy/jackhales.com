@@ -36,6 +36,11 @@ export interface ArticleSummary {
   /** ISO 8601 timestamp. */
   publishedAt: string;
   status: ArticleStatus;
+  /**
+   * Set to true automatically by every write made with an API key, and rendered
+   * as the AI-assisted badge. A key cannot set or clear it; only the admin can.
+   */
+  aiAssisted: boolean;
   updatedAt: string;
 }
 

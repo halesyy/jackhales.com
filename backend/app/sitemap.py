@@ -7,6 +7,7 @@ STATIC_PATHS = (
     "",
     "/articles",
     "/background-and-experience",
+    "/ai-assisted",
     "/software-engineers-guide-exploring-oman-top-travel-tips-itinerary",
 )
 
