@@ -42,6 +42,10 @@ export const getStaticProps: GetStaticProps<articlePageProps, { slug: string }> 
 
 export default function ArticlePage({ article }: articlePageProps) {
   const [views, setViews] = useState<number | null>(null);
+  const seo = article.seo;
+  const metaTitle = seo?.metaTitle || `${article.title} — Jack Hales`;
+  const metaDescription = seo?.metaDescription || article.summary;
+  const socialImage = seo?.ogImageUrl || article.heroImage?.url || null;
 
   useEffect(() => {
     let active = true;
@@ -62,11 +66,16 @@ export default function ArticlePage({ article }: articlePageProps) {
   return (
     <SiteShell>
       <Head>
-        <title>{`${article.title} — Jack Hales`}</title>
-        <meta name="description" content={article.summary} />
+        <title>{metaTitle}</title>
+        <meta name="description" content={metaDescription} />
+        {seo?.keywords?.length ? <meta name="keywords" content={seo.keywords.join(", ")} /> : null}
+        {seo?.canonicalUrl ? <link rel="canonical" href={seo.canonicalUrl} /> : null}
+        {seo?.noIndex ? <meta name="robots" content="noindex, nofollow" /> : null}
         <meta property="og:type" content="article" />
-        <meta property="og:title" content={article.title} />
-        <meta property="og:description" content={article.summary} />
+        <meta property="og:title" content={seo?.metaTitle || article.title} />
+        <meta property="og:description" content={metaDescription} />
+        {socialImage ? <meta property="og:image" content={socialImage} /> : null}
+        <meta name="twitter:card" content={socialImage ? "summary_large_image" : "summary"} />
         <meta property="article:published_time" content={article.publishedAt} />
       </Head>
 
@@ -81,6 +90,14 @@ export default function ArticlePage({ article }: articlePageProps) {
           <span aria-live="polite"><Eye size={15} /> {views === null ? "Loading views" : `${views.toLocaleString()} ${views === 1 ? "view" : "views"}`}</span>
         </div>
       </Reveal>
+
+      {article.heroImage ? (
+        <Reveal className="article-hero-image" delay={0.05} viewportAmount="some">
+          {/* Hero images come from the article record and can be any external host. */}
+          <img src={article.heroImage.url} alt={article.heroImage.alt} loading="lazy" />
+          {article.heroImage.caption ? <figcaption>{article.heroImage.caption}</figcaption> : null}
+        </Reveal>
+      ) : null}
 
       <Reveal className="article-paper card" delay={0.1} viewportAmount="some">
         <MarkdownContent markdown={article.bodyMarkdown} />

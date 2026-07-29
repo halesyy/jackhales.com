@@ -1,0 +1,15 @@
+# Codex interface manifest placeholder.
+# Mirrors ../SKILL.md so `$jackhales` resolves to the same command surface in Codex.
+interface:
+  display_name: "Jack Hales Articles"
+  short_description: "Draft and edit jackhales.com articles safely"
+  default_prompt: "Use $jackhales to work on my article drafts. You cannot publish."
+  entrypoint: "scripts/jackhales-content"
+  capabilities:
+    - read published and draft articles
+    - create drafts
+    - edit draft titles, slugs, summaries, sections, SEO fields and images
+  restrictions:
+    - cannot publish or unpublish
+    - cannot modify a published article
+    - cannot delete articles

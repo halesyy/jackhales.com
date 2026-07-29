@@ -34,6 +34,33 @@ INTERNAL_API_BASE_URL=http://localhost:8000/api npm run build
 
 Existing articles are generated during the build. New articles are generated on their first request, and published changes revalidate every five minutes. Container builds use `BUILD_API_BASE_URL` as their build-time article source.
 
+## Draft Content API
+
+`/admin` can generate a single API key that lets a local command or agent work on
+article **drafts**. Only one key exists at a time, and generating a new one
+supersedes the previous one. Only the hash is stored; the key is shown once.
+
+The key can read every article and edit drafts — title, slug, summary, raw
+Markdown, individual sections, SEO fields, and images. It can never publish,
+never change a published article, and never delete one. Publishing stays with the
+admin session.
+
+```sh
+scripts/jackhales-content status
+scripts/jackhales-content login --apply     # store the key in the macOS Keychain
+scripts/jackhales-content list --status draft
+scripts/jackhales-content sections a-draft
+scripts/jackhales-content section a-draft background --body-file section.md --apply
+```
+
+Write commands print a JSON plan and change nothing until `--apply` is added.
+Point at a local backend with `JACKHALES_API_BASE_URL=http://localhost:8000/api`.
+
+See [docs/content-api.md](docs/content-api.md) for the full contract, the
+guardrail table, and the TypeScript definitions. The same operations are available
+through Plumb as `scripts/plumb services jackhales …`, and the `/jackhales` skill
+drives that adapter.
+
 ## Deployment
 
 GitHub Actions builds frontend and backend images and pushes them to GHCR.

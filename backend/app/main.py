@@ -7,10 +7,43 @@ from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pymongo.errors import DuplicateKeyError, PyMongoError
 
+from .apikeys import (
+    getApiKeyRecord,
+    issueApiKey,
+    revokeApiKey,
+    serializeApiKey,
+)
+from .apikeys import (
+    requireApiKey as requireApiKeyRecord,
+)
 from .auth_migration import applyPendingAuthMigration
 from .config import getSettings
+from .content import (
+    ContentEditError,
+    deleteSection,
+    insertSection,
+    replaceSection,
+    replaceText,
+    summarizeSections,
+)
 from .database import closeClient, ensureIndexes, getDatabase
-from .schemas import AdminCredentials, ArticleCreate, ArticleOut, ArticleSummary, ArticleUpdate
+from .schemas import (
+    AdminCredentials,
+    ApiKeyIssued,
+    ApiKeyMetadata,
+    ApiKeyRequest,
+    ArticleCreate,
+    ArticleOut,
+    ArticleSummary,
+    ArticleUpdate,
+    BodyReplace,
+    DraftBody,
+    DraftCreate,
+    DraftUpdate,
+    SectionInsert,
+    SectionList,
+    SectionUpdate,
+)
 from .security import (
     adminEmail,
     authenticatedAdminEmail,
@@ -31,6 +64,18 @@ def slugify(value: str) -> str:
     return slug or "untitled"
 
 
+def serializeSeo(value: dict | None) -> dict:
+    seo = value or {}
+    return {
+        "metaTitle": seo.get("metaTitle"),
+        "metaDescription": seo.get("metaDescription"),
+        "canonicalUrl": seo.get("canonicalUrl"),
+        "keywords": list(seo.get("keywords", [])),
+        "ogImageUrl": seo.get("ogImageUrl"),
+        "noIndex": bool(seo.get("noIndex", False)),
+    }
+
+
 def serializeArticle(document: dict) -> dict:
     return {
         "id": str(document["_id"]),
@@ -40,6 +85,8 @@ def serializeArticle(document: dict) -> dict:
         "bodyMarkdown": document.get("bodyMarkdown", ""),
         "publishedAt": document["publishedAt"],
         "status": document.get("status", "draft"),
+        "seo": serializeSeo(document.get("seo")),
+        "heroImage": document.get("heroImage"),
         "sourceUrl": document.get("sourceUrl"),
         "createdAt": document["createdAt"],
         "updatedAt": document["updatedAt"],
@@ -48,9 +95,8 @@ def serializeArticle(document: dict) -> dict:
 
 def serializeSummary(document: dict) -> dict:
     article = serializeArticle(document)
-    article.pop("bodyMarkdown", None)
-    article.pop("sourceUrl", None)
-    article.pop("createdAt", None)
+    for field in ("bodyMarkdown", "sourceUrl", "createdAt", "seo", "heroImage"):
+        article.pop(field, None)
     return article
 
 
@@ -84,6 +130,50 @@ def database() -> AsyncIOMotorDatabase:
 
 async def adminOnly(request: Request, database: AsyncIOMotorDatabase = Depends(database)) -> None:
     await requireAdmin(database, request)
+
+
+async def apiKeyOnly(request: Request, database: AsyncIOMotorDatabase = Depends(database)) -> dict:
+    return await requireApiKeyRecord(database, request)
+
+
+async def saveArticleUpdate(database: AsyncIOMotorDatabase, existing: dict, update: dict) -> dict:
+    if "slug" in update:
+        update["slug"] = slugify(update["slug"])
+    update["updatedAt"] = datetime.now(UTC)
+    try:
+        await database.articles.update_one({"_id": existing["_id"]}, {"$set": update})
+    except DuplicateKeyError as error:
+        raise HTTPException(status_code=409, detail=f"the slug '{update['slug']}' is already taken") from error
+
+    updatedSlug = update.get("slug", existing["slug"])
+    if updatedSlug != existing["slug"]:
+        await database.articleViews.update_many({"articleSlug": existing["slug"]}, {"$set": {"articleSlug": updatedSlug}})
+    return serializeArticle(await database.articles.find_one({"slug": updatedSlug}))
+
+
+async def loadArticleForApiKey(database: AsyncIOMotorDatabase, slug: str) -> dict:
+    article = await database.articles.find_one({"slug": slug})
+    if not article:
+        raise HTTPException(status_code=404, detail="article not found")
+    return article
+
+
+async def loadEditableDraft(database: AsyncIOMotorDatabase, slug: str) -> dict:
+    article = await loadArticleForApiKey(database, slug)
+    if article.get("status", "draft") != "draft":
+        raise HTTPException(
+            status_code=409,
+            detail="this article is published and is read-only for API keys; only the admin can change published work",
+        )
+    return article
+
+
+async def saveBodyEdit(database: AsyncIOMotorDatabase, article: dict, edit) -> dict:
+    try:
+        bodyMarkdown = edit(article.get("bodyMarkdown", ""))
+    except ContentEditError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    return await saveArticleUpdate(database, article, {"bodyMarkdown": bodyMarkdown})
 
 
 def setAdminSessionCookie(response: Response, token: str) -> None:
@@ -265,13 +355,194 @@ async def updateArticle(slug: str, payload: ArticleUpdate, database: AsyncIOMoto
     existing = await database.articles.find_one({"slug": slug})
     if not existing:
         raise HTTPException(status_code=404, detail="article not found")
-    update = {key: value for key, value in payload.model_dump(exclude_unset=True).items() if value is not None}
-    if "slug" in update:
-        update["slug"] = slugify(update["slug"])
-    update["updatedAt"] = datetime.now(UTC)
-    await database.articles.update_one({"_id": existing["_id"]}, {"$set": update})
-    updatedSlug = update.get("slug", slug)
-    if updatedSlug != slug:
-        await database.articleViews.update_many({"articleSlug": slug}, {"$set": {"articleSlug": updatedSlug}})
-    article = await database.articles.find_one({"slug": updatedSlug})
-    return serializeArticle(article)
+    # heroImage is the one field where an explicit null means "remove the image".
+    submitted = payload.model_dump(exclude_unset=True)
+    update = {key: value for key, value in submitted.items() if value is not None or key == "heroImage"}
+    return await saveArticleUpdate(database, existing, update)
+
+
+@app.get("/api/admin/api-key", response_model=ApiKeyMetadata, dependencies=[Depends(adminOnly)])
+async def adminGetApiKey(database: AsyncIOMotorDatabase = Depends(database)) -> dict:
+    return serializeApiKey(await getApiKeyRecord(database))
+
+
+@app.post("/api/admin/api-key", response_model=ApiKeyIssued)
+async def adminCreateApiKey(
+    payload: ApiKeyRequest,
+    request: Request,
+    database: AsyncIOMotorDatabase = Depends(database),
+) -> dict:
+    """Issue the single active key. Any previous key stops working immediately."""
+    email = await requireAdmin(database, request)
+    key, metadata = await issueApiKey(database, email, payload.label)
+    return {**metadata, "key": key}
+
+
+@app.delete("/api/admin/api-key", dependencies=[Depends(adminOnly)])
+async def adminRevokeApiKey(database: AsyncIOMotorDatabase = Depends(database)) -> dict[str, bool]:
+    return {"revoked": await revokeApiKey(database)}
+
+
+@app.get("/api/content/whoami")
+async def contentWhoami(record: dict = Depends(apiKeyOnly)) -> dict[str, object]:
+    return {
+        "authenticated": True,
+        "scope": record.get("scope", "articles:draft"),
+        "label": record.get("label", ""),
+        "hint": record.get("hint", ""),
+        "canPublish": False,
+        "permissions": [
+            "read published and draft articles",
+            "create drafts",
+            "edit draft title, slug, summary, body, sections, SEO fields and images",
+        ],
+        "restrictions": [
+            "cannot publish or unpublish an article",
+            "cannot modify an article whose status is published",
+            "cannot delete articles",
+        ],
+    }
+
+
+@app.get("/api/content/articles", response_model=list[ArticleSummary])
+async def contentListArticles(
+    status: str | None = None,
+    database: AsyncIOMotorDatabase = Depends(database),
+    record: dict = Depends(apiKeyOnly),
+) -> list[dict]:
+    if status is not None and status not in {"draft", "published"}:
+        raise HTTPException(status_code=422, detail="status filter must be 'draft' or 'published'")
+    query = {"status": status} if status else {}
+    cursor = database.articles.find(query).sort("publishedAt", -1)
+    return [serializeSummary(article) async for article in cursor]
+
+
+@app.get("/api/content/articles/{slug}", response_model=ArticleOut)
+async def contentGetArticle(
+    slug: str,
+    database: AsyncIOMotorDatabase = Depends(database),
+    record: dict = Depends(apiKeyOnly),
+) -> dict:
+    return serializeArticle(await loadArticleForApiKey(database, slug))
+
+
+@app.post("/api/content/articles", response_model=ArticleOut, status_code=201)
+async def contentCreateDraft(
+    payload: DraftCreate,
+    database: AsyncIOMotorDatabase = Depends(database),
+    record: dict = Depends(apiKeyOnly),
+) -> dict:
+    now = datetime.now(UTC)
+    document = payload.model_dump()
+    document["slug"] = slugify(document.pop("slug", None) or document["title"])
+    document["publishedAt"] = document.get("publishedAt") or now
+    document["status"] = "draft"
+    document["createdAt"] = now
+    document["updatedAt"] = now
+    try:
+        result = await database.articles.insert_one(document)
+    except DuplicateKeyError as error:
+        raise HTTPException(status_code=409, detail=f"the slug '{document['slug']}' is already taken") from error
+    return serializeArticle(await database.articles.find_one({"_id": result.inserted_id}))
+
+
+@app.patch("/api/content/articles/{slug}", response_model=ArticleOut)
+async def contentUpdateDraft(
+    slug: str,
+    payload: DraftUpdate,
+    database: AsyncIOMotorDatabase = Depends(database),
+    record: dict = Depends(apiKeyOnly),
+) -> dict:
+    article = await loadEditableDraft(database, slug)
+    update = payload.model_dump(exclude_unset=True)
+    clearHeroImage = update.pop("clearHeroImage", False)
+    update = {key: value for key, value in update.items() if value is not None}
+    if clearHeroImage:
+        update["heroImage"] = None
+    if not update:
+        raise HTTPException(status_code=422, detail="provide at least one field to update")
+    return await saveArticleUpdate(database, article, update)
+
+
+@app.put("/api/content/articles/{slug}/body", response_model=ArticleOut)
+async def contentReplaceBody(
+    slug: str,
+    payload: DraftBody,
+    database: AsyncIOMotorDatabase = Depends(database),
+    record: dict = Depends(apiKeyOnly),
+) -> dict:
+    article = await loadEditableDraft(database, slug)
+    return await saveBodyEdit(database, article, lambda _body: payload.bodyMarkdown)
+
+
+@app.post("/api/content/articles/{slug}/body/replace", response_model=ArticleOut)
+async def contentReplaceText(
+    slug: str,
+    payload: BodyReplace,
+    database: AsyncIOMotorDatabase = Depends(database),
+    record: dict = Depends(apiKeyOnly),
+) -> dict:
+    article = await loadEditableDraft(database, slug)
+    return await saveBodyEdit(
+        database,
+        article,
+        lambda body: replaceText(body, payload.find, payload.replace, payload.expectedCount),
+    )
+
+
+@app.get("/api/content/articles/{slug}/sections", response_model=SectionList)
+async def contentListSections(
+    slug: str,
+    database: AsyncIOMotorDatabase = Depends(database),
+    record: dict = Depends(apiKeyOnly),
+) -> dict:
+    article = await loadArticleForApiKey(database, slug)
+    status = article.get("status", "draft")
+    return {
+        "slug": article["slug"],
+        "status": status,
+        "editable": status == "draft",
+        "sections": summarizeSections(article.get("bodyMarkdown", "")),
+    }
+
+
+@app.put("/api/content/articles/{slug}/sections/{sectionId}", response_model=ArticleOut)
+async def contentUpdateSection(
+    slug: str,
+    sectionId: str,
+    payload: SectionUpdate,
+    database: AsyncIOMotorDatabase = Depends(database),
+    record: dict = Depends(apiKeyOnly),
+) -> dict:
+    article = await loadEditableDraft(database, slug)
+    return await saveBodyEdit(
+        database,
+        article,
+        lambda body: replaceSection(body, sectionId, payload.heading, payload.body),
+    )
+
+
+@app.post("/api/content/articles/{slug}/sections", response_model=ArticleOut)
+async def contentInsertSection(
+    slug: str,
+    payload: SectionInsert,
+    database: AsyncIOMotorDatabase = Depends(database),
+    record: dict = Depends(apiKeyOnly),
+) -> dict:
+    article = await loadEditableDraft(database, slug)
+    return await saveBodyEdit(
+        database,
+        article,
+        lambda body: insertSection(body, payload.heading, payload.body, payload.level, payload.after, payload.before),
+    )
+
+
+@app.delete("/api/content/articles/{slug}/sections/{sectionId}", response_model=ArticleOut)
+async def contentDeleteSection(
+    slug: str,
+    sectionId: str,
+    database: AsyncIOMotorDatabase = Depends(database),
+    record: dict = Depends(apiKeyOnly),
+) -> dict:
+    article = await loadEditableDraft(database, slug)
+    return await saveBodyEdit(database, article, lambda body: deleteSection(body, sectionId))

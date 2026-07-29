@@ -1,4 +1,4 @@
-import { ArrowLeft, Clock3, FilePenLine, Files, FileText, LogOut, Plus } from "lucide-react";
+import { ArrowLeft, Clock3, Copy, FilePenLine, Files, FileText, KeyRound, LogOut, Plus, ShieldAlert, Trash2 } from "lucide-react";
 import Head from "next/head";
 import { useEffect, useState } from "react";
 
@@ -6,7 +6,7 @@ import { ArticleForm, type articlePayload } from "../components/ArticleForm";
 import { SiteShell } from "../components/SiteShell";
 import { adminFetch } from "../lib/api";
 import { formatDate } from "../lib/date";
-import type { adminStatus, articleDetail, articleSummary } from "../lib/types";
+import type { adminStatus, apiKeyIssued, apiKeyMetadata, articleDetail, articleSummary } from "../lib/types";
 
 type adminView = "library" | "new" | "edit";
 
@@ -22,11 +22,70 @@ export default function AdminPage() {
   const [message, setMessage] = useState("");
   const [loadingArticle, setLoadingArticle] = useState(false);
   const [submittingCredentials, setSubmittingCredentials] = useState(false);
+  const [apiKey, setApiKey] = useState<apiKeyMetadata | null>(null);
+  const [apiKeyLabel, setApiKeyLabel] = useState("");
+  const [issuedKey, setIssuedKey] = useState("");
+  const [apiKeyBusy, setApiKeyBusy] = useState(false);
+  const [apiKeyError, setApiKeyError] = useState("");
+  const [copied, setCopied] = useState(false);
 
   async function loadArticles() {
     const nextArticles = await adminFetch<articleSummary[]>("/admin/articles");
     setArticles(nextArticles);
     setLoggedIn(true);
+  }
+
+  async function loadApiKey() {
+    try {
+      setApiKey(await adminFetch<apiKeyMetadata>("/admin/api-key"));
+    } catch {
+      // The workspace stays usable when the key service is briefly unavailable.
+    }
+  }
+
+  async function generateApiKey() {
+    const replacing = apiKey?.configured;
+    if (replacing && !window.confirm("Generating a new key immediately stops the current one from working. Continue?")) return;
+
+    setApiKeyBusy(true);
+    setApiKeyError("");
+    setCopied(false);
+    try {
+      const issued = await adminFetch<apiKeyIssued>("/admin/api-key", { method: "POST", body: JSON.stringify({ label: apiKeyLabel.trim() }) });
+      const { key, ...metadata } = issued;
+      setIssuedKey(key);
+      setApiKey(metadata);
+      setApiKeyLabel("");
+    } catch (error) {
+      setApiKeyError(error instanceof Error ? error.message : "Could not generate the API key.");
+    } finally {
+      setApiKeyBusy(false);
+    }
+  }
+
+  async function revokeApiKey() {
+    if (!window.confirm("Revoke the API key? Any command using it stops working immediately.")) return;
+
+    setApiKeyBusy(true);
+    setApiKeyError("");
+    try {
+      await adminFetch("/admin/api-key", { method: "DELETE" });
+      setIssuedKey("");
+      await loadApiKey();
+    } catch (error) {
+      setApiKeyError(error instanceof Error ? error.message : "Could not revoke the API key.");
+    } finally {
+      setApiKeyBusy(false);
+    }
+  }
+
+  async function copyIssuedKey() {
+    try {
+      await navigator.clipboard.writeText(issuedKey);
+      setCopied(true);
+    } catch {
+      setApiKeyError("Copying failed. Select the key and copy it manually.");
+    }
   }
 
   useEffect(() => {
@@ -45,6 +104,7 @@ export default function AdminPage() {
             if (!active) return;
             setArticles(nextArticles);
             setLoggedIn(true);
+            await loadApiKey();
           } catch {
             // The session may have expired between the status and article requests.
           }
@@ -78,6 +138,7 @@ export default function AdminPage() {
       setConfirmPassword("");
       setStatus({ ...status, configured: true, authenticated: true });
       await loadArticles();
+      await loadApiKey();
       setView("library");
     } finally {
       setSubmittingCredentials(false);
@@ -127,6 +188,8 @@ export default function AdminPage() {
     setLoggedIn(false);
     setArticles([]);
     setEditing(undefined);
+    setApiKey(null);
+    setIssuedKey("");
     setView("library");
     setStatus((current) => current ? { ...current, configured: true, authenticated: false } : current);
   }
@@ -217,6 +280,53 @@ export default function AdminPage() {
                 {!articles.length ? <div className="admin-empty"><FileText size={24} /><p>No articles yet.</p><button className="button button-dark" onClick={newArticle}>Create the first article</button></div> : null}
               </div>
             </div>
+
+            <section className="api-key-panel card">
+              <div className="api-key-heading">
+                <span className="icon-tile icon-blue"><KeyRound size={19} /></span>
+                <div>
+                  <h2>Draft API key</h2>
+                  <p>One key at a time. It can read everything and edit drafts — it can never publish.</p>
+                </div>
+                <span className={`article-status article-status-${apiKey?.configured ? "published" : "draft"}`}>{apiKey?.configured ? "active" : "none"}</span>
+              </div>
+
+              {apiKey?.configured ? (
+                <dl className="api-key-facts">
+                  <div><dt>Key</dt><dd><code>{apiKey.hint}</code></dd></div>
+                  <div><dt>Label</dt><dd>{apiKey.label || "—"}</dd></div>
+                  <div><dt>Scope</dt><dd><code>{apiKey.scope}</code></dd></div>
+                  <div><dt>Created</dt><dd>{apiKey.createdAt ? formatDate(apiKey.createdAt) : "—"}</dd></div>
+                  <div><dt>Last used</dt><dd>{apiKey.lastUsedAt ? formatDate(apiKey.lastUsedAt) : "Never"}</dd></div>
+                </dl>
+              ) : (
+                <p className="api-key-empty">No key is active. Generate one to let a local command work on drafts.</p>
+              )}
+
+              {issuedKey ? (
+                <div className="api-key-reveal">
+                  <p><ShieldAlert size={15} /> Copy this now — it is shown once and never again.</p>
+                  <code>{issuedKey}</code>
+                  <button className="button button-outline" onClick={() => copyIssuedKey()}><Copy size={15} /> {copied ? "Copied" : "Copy key"}</button>
+                </div>
+              ) : null}
+
+              <div className="api-key-actions">
+                <label>
+                  <span>Label</span>
+                  <input value={apiKeyLabel} maxLength={80} placeholder="plumb adapter" onChange={(event) => setApiKeyLabel(event.target.value)} />
+                </label>
+                <button className="button button-dark" disabled={apiKeyBusy} onClick={() => generateApiKey()}>
+                  <KeyRound size={16} /> {apiKeyBusy ? "Working…" : apiKey?.configured ? "Generate new key" : "Generate API key"}
+                </button>
+                {apiKey?.configured ? (
+                  <button className="button button-outline" disabled={apiKeyBusy} onClick={() => revokeApiKey()}><Trash2 size={16} /> Revoke</button>
+                ) : null}
+              </div>
+
+              {apiKeyError ? <p className="admin-error">{apiKeyError}</p> : null}
+            </section>
+
             {message ? <div className="admin-toast">{message}</div> : null}
           </>
         ) : (

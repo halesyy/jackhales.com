@@ -1,7 +1,7 @@
 import { Bold, Code2, Heading1, Italic, Link2, List, Quote, RotateCcw, Save, Send } from "lucide-react";
 import { useMemo, useState } from "react";
 
-import type { articleDetail } from "../lib/types";
+import type { articleDetail, articleImage, articleSeo } from "../lib/types";
 import { MarkdownContent } from "./MarkdownContent";
 
 type articleFormProps = {
@@ -18,7 +18,13 @@ export type articlePayload = {
   bodyMarkdown: string;
   publishedAt: string;
   status: "draft" | "published";
+  seo: articleSeo;
+  heroImage: articleImage | null;
 };
+
+function optionalText(value: string): string | null {
+  return value.trim() || null;
+}
 
 function slugify(value: string): string {
   return value
@@ -39,6 +45,14 @@ export function ArticleForm({ article, mode, onSubmit, onCancel }: articleFormPr
   const [bodyMarkdown, setBodyMarkdown] = useState(article?.bodyMarkdown || "");
   const [publishedAt, setPublishedAt] = useState(article?.publishedAt.slice(0, 10) || new Date().toISOString().slice(0, 10));
   const [status, setStatus] = useState<"draft" | "published">(article?.status || "draft");
+  const [metaTitle, setMetaTitle] = useState(article?.seo?.metaTitle || "");
+  const [metaDescription, setMetaDescription] = useState(article?.seo?.metaDescription || "");
+  const [canonicalUrl, setCanonicalUrl] = useState(article?.seo?.canonicalUrl || "");
+  const [keywords, setKeywords] = useState((article?.seo?.keywords || []).join(", "));
+  const [ogImageUrl, setOgImageUrl] = useState(article?.seo?.ogImageUrl || "");
+  const [noIndex, setNoIndex] = useState(article?.seo?.noIndex || false);
+  const [heroImageUrl, setHeroImageUrl] = useState(article?.heroImage?.url || "");
+  const [heroImageAlt, setHeroImageAlt] = useState(article?.heroImage?.alt || "");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
 
@@ -84,6 +98,15 @@ export function ArticleForm({ article, mode, onSubmit, onCancel }: articleFormPr
         bodyMarkdown,
         publishedAt: isoFromInput(publishedAt),
         status: resolvedStatus,
+        seo: {
+          metaTitle: optionalText(metaTitle),
+          metaDescription: optionalText(metaDescription),
+          canonicalUrl: optionalText(canonicalUrl),
+          keywords: keywords.split(",").map((keyword) => keyword.trim()).filter(Boolean),
+          ogImageUrl: optionalText(ogImageUrl),
+          noIndex,
+        },
+        heroImage: heroImageUrl.trim() ? { url: heroImageUrl.trim(), alt: heroImageAlt.trim() } : null,
       });
       setStatus(resolvedStatus);
     } catch (error) {
@@ -133,6 +156,51 @@ export function ArticleForm({ article, mode, onSubmit, onCancel }: articleFormPr
           </select>
         </label>
       </div>
+
+      <details className="editor-seo" open={Boolean(metaTitle || metaDescription || canonicalUrl || keywords || ogImageUrl || heroImageUrl || noIndex)}>
+        <summary>SEO and images</summary>
+        <div className="editor-fields-grid">
+          <label className="editor-field">
+            <span className="editor-label-row"><span>Meta title</span><small>Falls back to the title</small></span>
+            <input value={metaTitle} maxLength={180} placeholder={title || "Article title"} onChange={(event) => setMetaTitle(event.target.value)} />
+          </label>
+
+          <label className="editor-field">
+            <span className="editor-label-row"><span>Canonical URL</span><small>Optional</small></span>
+            <input value={canonicalUrl} maxLength={500} placeholder="https://jackhales.com/article/…" onChange={(event) => setCanonicalUrl(event.target.value)} />
+          </label>
+
+          <label className="editor-field editor-field-wide">
+            <span className="editor-label-row"><span>Meta description</span><small>{metaDescription.length}/320 — falls back to the summary</small></span>
+            <textarea maxLength={320} value={metaDescription} placeholder="How this article should read in search results." onChange={(event) => setMetaDescription(event.target.value)} />
+          </label>
+
+          <label className="editor-field editor-field-wide">
+            <span className="editor-label-row"><span>Keywords</span><small>Comma separated</small></span>
+            <input value={keywords} placeholder="research, engineering, travel" onChange={(event) => setKeywords(event.target.value)} />
+          </label>
+
+          <label className="editor-field">
+            <span>Social image URL</span>
+            <input value={ogImageUrl} maxLength={500} placeholder="https://jackhales.com/og/article.png" onChange={(event) => setOgImageUrl(event.target.value)} />
+          </label>
+
+          <label className="editor-field">
+            <span>Hero image URL</span>
+            <input value={heroImageUrl} maxLength={500} placeholder="/images/hero.png" onChange={(event) => setHeroImageUrl(event.target.value)} />
+          </label>
+
+          <label className="editor-field">
+            <span>Hero image alt text</span>
+            <input value={heroImageAlt} maxLength={300} placeholder="What the image shows" onChange={(event) => setHeroImageAlt(event.target.value)} />
+          </label>
+
+          <label className="editor-field editor-checkbox">
+            <input type="checkbox" checked={noIndex} onChange={(event) => setNoIndex(event.target.checked)} />
+            <span>Ask search engines not to index this article</span>
+          </label>
+        </div>
+      </details>
 
       <div className="editor-content-heading">
         <div><p className="eyebrow">Article content</p><h2>Write and preview together.</h2></div>

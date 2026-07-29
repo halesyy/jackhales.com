@@ -1,0 +1,397 @@
+#!/usr/bin/env python3
+"""Local command for the Jack Hales draft content API.
+
+Reads the API key from JACKHALES_API_KEY first and the macOS Keychain second, so
+the key is never passed as a command argument or written into the repository.
+Write commands print a JSON plan and only change anything when --apply is added.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+from typing import Any
+from urllib.error import HTTPError, URLError
+from urllib.parse import quote, urlencode
+from urllib.request import Request, urlopen
+
+defaultBaseUrl = "https://api.jackhales.com/api"
+keychainService = "com.jackhales.api"
+keychainAccount = "content"
+keychainRef = f"keychain:macos:{keychainService}/{keychainAccount}"
+securityCommand = Path("/usr/bin/security")
+timeoutSeconds = 30
+
+
+class ContentCommandError(RuntimeError):
+    """Raised for any condition the operator needs to read and act on."""
+
+
+def baseUrl() -> str:
+    return os.environ.get("JACKHALES_API_BASE_URL", defaultBaseUrl).rstrip("/")
+
+
+def keychainSupported() -> bool:
+    return sys.platform == "darwin" and securityCommand.is_file()
+
+
+def keychainToken() -> str | None:
+    if not keychainSupported():
+        return None
+    completed = subprocess.run(
+        [str(securityCommand), "find-generic-password", "-a", keychainAccount, "-s", keychainService, "-w"],
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+    )
+    return completed.stdout.strip() or None if completed.returncode == 0 else None
+
+
+def resolveKey() -> tuple[str, str]:
+    environmentKey = os.environ.get("JACKHALES_API_KEY", "").strip()
+    if environmentKey:
+        return environmentKey, "env:JACKHALES_API_KEY"
+    stored = keychainToken()
+    if stored:
+        return stored, keychainRef
+    raise ContentCommandError(
+        "No API key is available. Generate one at https://jackhales.com/admin, then run "
+        "`scripts/jackhales-content login --apply` in an interactive terminal or export JACKHALES_API_KEY."
+    )
+
+
+def storeKeyInteractively() -> None:
+    if not keychainSupported():
+        raise ContentCommandError("macOS Keychain is unavailable. Export JACKHALES_API_KEY instead.")
+    if not sys.stdin.isatty():
+        raise ContentCommandError("Storing the key needs an interactive terminal so it is never placed in an argument or log.")
+
+    completed = subprocess.run(
+        [
+            str(securityCommand),
+            "add-generic-password",
+            "-U",
+            "-a",
+            keychainAccount,
+            "-s",
+            keychainService,
+            "-l",
+            "Jack Hales content API key",
+            "-w",
+        ],
+        check=False,
+    )
+    if completed.returncode != 0:
+        raise ContentCommandError("macOS Keychain did not store the key. Nothing was changed.")
+
+
+def call(method: str, path: str, body: dict | None = None, query: dict | None = None) -> Any:
+    key, _ = resolveKey()
+    url = f"{baseUrl()}{path}"
+    if query:
+        encoded = urlencode({name: value for name, value in query.items() if value is not None})
+        if encoded:
+            url = f"{url}?{encoded}"
+
+    payload = json.dumps(body).encode() if body is not None else None
+    headers = {"Accept": "application/json", "Authorization": f"Bearer {key}", "User-Agent": "jackhales-content/1.0"}
+    if payload is not None:
+        headers["Content-Type"] = "application/json"
+
+    try:
+        with urlopen(Request(url, data=payload, headers=headers, method=method), timeout=timeoutSeconds) as response:
+            raw = response.read()
+            return json.loads(raw) if raw else None
+    except HTTPError as error:
+        detail = error.read().decode("utf-8", errors="replace")
+        try:
+            detail = json.loads(detail).get("detail", detail)
+        except json.JSONDecodeError:
+            pass
+        raise ContentCommandError(f"HTTP {error.code}: {detail}") from error
+    except URLError as error:
+        raise ContentCommandError(f"could not reach {baseUrl()}: {error.reason}") from error
+
+
+def emit(value: Any) -> None:
+    print(json.dumps(value, indent=2, sort_keys=True, default=str))
+
+
+def plan(action: str, method: str, path: str, body: dict | None = None) -> None:
+    emit({"action": action, "apply": False, "method": method, "path": path, "body": body, "status": "planned"})
+
+
+def run(applied: bool, action: str, method: str, path: str, body: dict | None = None) -> None:
+    if not applied:
+        plan(action, method, path, body)
+        return
+    emit(call(method, path, body))
+
+
+def readText(value: str | None, path: str | None) -> str | None:
+    if path is not None:
+        if value is not None:
+            raise ContentCommandError("use either the inline text or the file option, not both")
+        return Path(path).read_text(encoding="utf-8")
+    return value
+
+
+def segment(value: str) -> str:
+    return quote(value, safe="")
+
+
+def seoFrom(arguments: argparse.Namespace) -> dict | None:
+    fields = {
+        "metaTitle": arguments.meta_title,
+        "metaDescription": arguments.meta_description,
+        "canonicalUrl": arguments.canonical_url,
+        "ogImageUrl": arguments.og_image,
+    }
+    seo = {name: value for name, value in fields.items() if value is not None}
+    if arguments.keyword:
+        seo["keywords"] = arguments.keyword
+    if arguments.no_index is not None:
+        seo["noIndex"] = arguments.no_index
+    return seo or None
+
+
+def heroFrom(arguments: argparse.Namespace) -> dict | None:
+    if arguments.hero_image is None:
+        return None
+    return {"url": arguments.hero_image, "alt": arguments.hero_alt or ""}
+
+
+def addSeoOptions(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--meta-title")
+    parser.add_argument("--meta-description")
+    parser.add_argument("--canonical-url")
+    parser.add_argument("--og-image")
+    parser.add_argument("--keyword", action="append")
+    parser.add_argument("--no-index", action=argparse.BooleanOptionalAction, default=None)
+    parser.add_argument("--hero-image")
+    parser.add_argument("--hero-alt")
+
+
+def addApply(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--apply", action="store_true", help="Perform the change after reviewing the plan.")
+
+
+def buildParser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="jackhales-content", description=__doc__.splitlines()[0])
+    commands = parser.add_subparsers(dest="command", required=True)
+
+    commands.add_parser("status", help="Show where the key resolves from without revealing it.")
+    login = commands.add_parser("login", help="Store the API key in the macOS Keychain through a hidden prompt.")
+    addApply(login)
+    commands.add_parser("whoami", help="Ask the API what this key is allowed to do.")
+
+    listing = commands.add_parser("list", help="List articles.")
+    listing.add_argument("--status", choices=["draft", "published"])
+
+    read = commands.add_parser("read", help="Read one article.")
+    read.add_argument("slug")
+    read.add_argument("--raw", action="store_true", help="Print the raw Markdown body only.")
+
+    sections = commands.add_parser("sections", help="List the addressable sections of an article.")
+    sections.add_argument("slug")
+
+    create = commands.add_parser("new", help="Create a draft.")
+    create.add_argument("title")
+    create.add_argument("--slug")
+    create.add_argument("--summary", default="")
+    create.add_argument("--body")
+    create.add_argument("--body-file")
+    addSeoOptions(create)
+    addApply(create)
+
+    update = commands.add_parser("set", help="Update draft metadata, SEO fields, or images.")
+    update.add_argument("slug")
+    update.add_argument("--title")
+    update.add_argument("--new-slug")
+    update.add_argument("--summary")
+    update.add_argument("--clear-hero-image", action="store_true")
+    addSeoOptions(update)
+    addApply(update)
+
+    body = commands.add_parser("body", help="Replace the whole raw Markdown body of a draft.")
+    body.add_argument("slug")
+    body.add_argument("--body")
+    body.add_argument("--body-file")
+    addApply(body)
+
+    replace = commands.add_parser("replace", help="Replace exact text inside a draft.")
+    replace.add_argument("slug")
+    replace.add_argument("--find", required=True)
+    replace.add_argument("--with", dest="replacement", default="")
+    replace.add_argument("--count", type=int, help="Confirm the expected number of occurrences.")
+    addApply(replace)
+
+    section = commands.add_parser("section", help="Rewrite one section without touching the rest.")
+    section.add_argument("slug")
+    section.add_argument("section_id")
+    section.add_argument("--heading")
+    section.add_argument("--body")
+    section.add_argument("--body-file")
+    addApply(section)
+
+    insert = commands.add_parser("add-section", help="Insert a new section relative to an existing one.")
+    insert.add_argument("slug")
+    insert.add_argument("--heading", required=True)
+    insert.add_argument("--body")
+    insert.add_argument("--body-file")
+    insert.add_argument("--level", type=int, default=2)
+    insert.add_argument("--after")
+    insert.add_argument("--before")
+    addApply(insert)
+
+    drop = commands.add_parser("drop-section", help="Delete one section of a draft.")
+    drop.add_argument("slug")
+    drop.add_argument("section_id")
+    addApply(drop)
+
+    return parser
+
+
+def dispatch(arguments: argparse.Namespace) -> None:
+    command = arguments.command
+
+    if command == "status":
+        resolvedFrom = None
+        if os.environ.get("JACKHALES_API_KEY", "").strip():
+            resolvedFrom = "env:JACKHALES_API_KEY"
+        elif keychainToken():
+            resolvedFrom = keychainRef
+        emit(
+            {
+                "baseUrl": baseUrl(),
+                "keychainSupported": keychainSupported(),
+                "resolvedFrom": resolvedFrom,
+                "scope": "articles:draft",
+                "secretRefs": ["env:JACKHALES_API_KEY", keychainRef],
+                "status": "ready" if resolvedFrom else "missing",
+            }
+        )
+        return
+
+    if command == "login":
+        if not arguments.apply:
+            emit({"action": "store-api-key", "apply": False, "input": "interactive-hidden", "secretRef": keychainRef, "status": "planned"})
+            return
+        storeKeyInteractively()
+        emit({"action": "store-api-key", "apply": True, "secretRef": keychainRef, "status": "stored"})
+        return
+
+    if command == "whoami":
+        emit(call("GET", "/content/whoami"))
+        return
+
+    if command == "list":
+        emit(call("GET", "/content/articles", query={"status": arguments.status}))
+        return
+
+    if command == "read":
+        article = call("GET", f"/content/articles/{segment(arguments.slug)}")
+        if arguments.raw:
+            sys.stdout.write(article.get("bodyMarkdown", ""))
+            return
+        emit(article)
+        return
+
+    if command == "sections":
+        emit(call("GET", f"/content/articles/{segment(arguments.slug)}/sections"))
+        return
+
+    if command == "new":
+        body = {"title": arguments.title, "summary": arguments.summary}
+        markdown = readText(arguments.body, arguments.body_file)
+        if markdown is not None:
+            body["bodyMarkdown"] = markdown
+        if arguments.slug:
+            body["slug"] = arguments.slug
+        seo = seoFrom(arguments)
+        if seo:
+            body["seo"] = seo
+        hero = heroFrom(arguments)
+        if hero:
+            body["heroImage"] = hero
+        run(arguments.apply, "create-draft", "POST", "/content/articles", body)
+        return
+
+    path = f"/content/articles/{segment(arguments.slug)}"
+
+    if command == "set":
+        body: dict[str, Any] = {}
+        for name, value in (("title", arguments.title), ("slug", arguments.new_slug), ("summary", arguments.summary)):
+            if value is not None:
+                body[name] = value
+        seo = seoFrom(arguments)
+        if seo:
+            body["seo"] = seo
+        hero = heroFrom(arguments)
+        if hero:
+            body["heroImage"] = hero
+        if arguments.clear_hero_image:
+            body["clearHeroImage"] = True
+        if not body:
+            raise ContentCommandError("provide at least one field to update")
+        run(arguments.apply, "update-draft", "PATCH", path, body)
+        return
+
+    if command == "body":
+        markdown = readText(arguments.body, arguments.body_file)
+        if markdown is None:
+            raise ContentCommandError("provide --body or --body-file")
+        run(arguments.apply, "replace-body", "PUT", f"{path}/body", {"bodyMarkdown": markdown})
+        return
+
+    if command == "replace":
+        body = {"find": arguments.find, "replace": arguments.replacement}
+        if arguments.count is not None:
+            body["expectedCount"] = arguments.count
+        run(arguments.apply, "replace-text", "POST", f"{path}/body/replace", body)
+        return
+
+    if command == "section":
+        body = {}
+        if arguments.heading is not None:
+            body["heading"] = arguments.heading
+        markdown = readText(arguments.body, arguments.body_file)
+        if markdown is not None:
+            body["body"] = markdown
+        if not body:
+            raise ContentCommandError("provide --heading, --body, or --body-file")
+        run(arguments.apply, "update-section", "PUT", f"{path}/sections/{segment(arguments.section_id)}", body)
+        return
+
+    if command == "add-section":
+        body = {"heading": arguments.heading, "level": arguments.level, "body": readText(arguments.body, arguments.body_file) or ""}
+        if (arguments.after is None) == (arguments.before is None):
+            raise ContentCommandError("provide exactly one of --after or --before")
+        body["after" if arguments.after is not None else "before"] = arguments.after or arguments.before
+        run(arguments.apply, "insert-section", "POST", f"{path}/sections", body)
+        return
+
+    if command == "drop-section":
+        run(arguments.apply, "delete-section", "DELETE", f"{path}/sections/{segment(arguments.section_id)}")
+        return
+
+
+def main() -> int:
+    try:
+        dispatch(buildParser().parse_args())
+    except ContentCommandError as error:
+        print(str(error), file=sys.stderr)
+        return 1
+    except OSError as error:
+        print(str(error), file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

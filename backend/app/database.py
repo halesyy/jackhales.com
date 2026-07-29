@@ -30,6 +30,7 @@ async def ensureIndexes() -> None:
     await database.adminSessions.create_index("tokenHash", unique=True)
     await database.adminSessions.create_index("expiresAt", expireAfterSeconds=0)
     await database.adminUsers.create_index("email", unique=True)
+    await database.apiKeys.create_index("keyHash", unique=True)
 
 
 async def closeClient() -> None:

@@ -1,0 +1,13 @@
+# Codex interface manifest placeholder.
+# Mirrors ../SKILL.md so key setup behaves identically in Codex.
+interface:
+  display_name: "Jack Hales API Key"
+  short_description: "Set up and verify the content API key"
+  default_prompt: "Use $jackhales-key to check or set up my jackhales.com content API key."
+  entrypoint: "scripts/jackhales-content"
+  secret_refs:
+    - "env:JACKHALES_API_KEY"
+    - "keychain:macos:com.jackhales.api/content"
+  restrictions:
+    - never print or pass the key value
+    - key generation and revocation happen only in /admin
