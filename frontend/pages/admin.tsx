@@ -1,12 +1,12 @@
-import { ArrowLeft, Clock3, Copy, FilePenLine, Files, FileText, KeyRound, LogOut, Plus, ShieldAlert, Trash2 } from "lucide-react";
+import { ArrowLeft, Clock3, Copy, FilePenLine, Files, FileText, KeyRound, LogOut, Plus, ShieldAlert, Trash2, Users } from "lucide-react";
 import Head from "next/head";
 import { useEffect, useState } from "react";
 
 import { ArticleForm, type articlePayload } from "../components/ArticleForm";
 import { SiteShell } from "../components/SiteShell";
 import { adminFetch } from "../lib/api";
-import { formatDate } from "../lib/date";
-import type { adminStatus, apiKeyIssued, apiKeyMetadata, articleDetail, articleSummary } from "../lib/types";
+import { formatDate, formatUnixDate } from "../lib/date";
+import type { adminStatus, adminSubscriberList, apiKeyIssued, apiKeyMetadata, articleDetail, articleSummary } from "../lib/types";
 
 type adminView = "library" | "new" | "edit";
 
@@ -28,6 +28,7 @@ export default function AdminPage() {
   const [apiKeyBusy, setApiKeyBusy] = useState(false);
   const [apiKeyError, setApiKeyError] = useState("");
   const [copied, setCopied] = useState(false);
+  const [subscribers, setSubscribers] = useState<adminSubscriberList | null>(null);
 
   async function loadArticles() {
     const nextArticles = await adminFetch<articleSummary[]>("/admin/articles");
@@ -40,6 +41,14 @@ export default function AdminPage() {
       setApiKey(await adminFetch<apiKeyMetadata>("/admin/api-key"));
     } catch {
       // The workspace stays usable when the key service is briefly unavailable.
+    }
+  }
+
+  async function loadSubscribers() {
+    try {
+      setSubscribers(await adminFetch<adminSubscriberList>("/admin/subscribers"));
+    } catch {
+      // The workspace stays usable when the subscribers service is briefly unavailable.
     }
   }
 
@@ -105,6 +114,7 @@ export default function AdminPage() {
             setArticles(nextArticles);
             setLoggedIn(true);
             await loadApiKey();
+            await loadSubscribers();
           } catch {
             // The session may have expired between the status and article requests.
           }
@@ -139,6 +149,7 @@ export default function AdminPage() {
       setStatus({ ...status, configured: true, authenticated: true });
       await loadArticles();
       await loadApiKey();
+      await loadSubscribers();
       setView("library");
     } finally {
       setSubmittingCredentials(false);
@@ -190,6 +201,7 @@ export default function AdminPage() {
     setEditing(undefined);
     setApiKey(null);
     setIssuedKey("");
+    setSubscribers(null);
     setView("library");
     setStatus((current) => current ? { ...current, configured: true, authenticated: false } : current);
   }
@@ -264,6 +276,7 @@ export default function AdminPage() {
               <div className="admin-stat card"><span className="icon-tile icon-blue"><Files size={19} /></span><div><strong>{articles.length}</strong><small>Total articles</small></div></div>
               <div className="admin-stat card"><span className="icon-tile icon-mint"><FileText size={19} /></span><div><strong>{publishedCount}</strong><small>Published</small></div></div>
               <div className="admin-stat card"><span className="icon-tile icon-peach"><FilePenLine size={19} /></span><div><strong>{draftCount}</strong><small>Drafts</small></div></div>
+              <div className="admin-stat card"><span className="icon-tile icon-yellow"><Users size={19} /></span><div><strong>{subscribers?.total ?? 0}</strong><small>Subscribers</small></div></div>
             </div>
 
             <div className="article-library card">
@@ -325,6 +338,48 @@ export default function AdminPage() {
               </div>
 
               {apiKeyError ? <p className="admin-error">{apiKeyError}</p> : null}
+            </section>
+
+            <section className="subscribers-panel card">
+              <div className="subscribers-heading">
+                <span className="icon-tile icon-yellow"><Users size={19} /></span>
+                <div>
+                  <h2>Subscribers</h2>
+                  <p>{subscribers ? `${subscribers.active} active of ${subscribers.total} total.` : "Newest sign-ups first."}</p>
+                </div>
+              </div>
+
+              {subscribers?.subscribers.length ? (
+                <div className="subscribers-list-wrap">
+                  <table className="subscribers-table">
+                    <thead>
+                      <tr>
+                        <th scope="col">Email</th>
+                        <th scope="col">Name</th>
+                        <th scope="col">Signed up</th>
+                        <th scope="col">Source</th>
+                        <th scope="col">IP</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {subscribers.subscribers.map((sub) => (
+                        <tr key={sub.id} className={sub.status === "active" ? undefined : "subscriber-inactive"}>
+                          <td>
+                            <span className="subscriber-email">{sub.email}</span>
+                            {sub.status === "active" ? null : <span className="subscriber-status-tag">unsubscribed</span>}
+                          </td>
+                          <td>{sub.name ? sub.name : <span className="subscriber-name-empty">—</span>}</td>
+                          <td className="subscribers-meta-cell">{formatUnixDate(sub.createdUnix)}</td>
+                          <td className="subscribers-meta-cell">{sub.source || "—"}</td>
+                          <td className="subscribers-meta-cell">{sub.clientIp}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="admin-empty"><Users size={24} /><p>No subscribers yet.</p></div>
+              )}
             </section>
 
             {message ? <div className="admin-toast">{message}</div> : null}

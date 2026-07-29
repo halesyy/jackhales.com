@@ -8,6 +8,9 @@ publicationFields = ("status", "publish", "published", "publishedState")
 # declare it — an agent must not be able to hide or claim its own involvement.
 automaticFields = ("aiAssisted",)
 maxKeywords = 25
+subscriberEmailMaxLength = 254
+subscriberNameMaxLength = 120
+subscriberSourceMaxLength = 200
 
 
 def validateAssetUrl(value: str | None) -> str | None:
@@ -26,6 +29,16 @@ def validateSlugValue(value: str) -> str:
     if not normalized.replace("-", "").replace("_", "").isalnum():
         raise ValueError("slug may contain letters, numbers, dashes, and underscores only")
     return normalized
+
+
+def validateSubscriberEmail(value: str) -> str:
+    email = value.strip().lower()
+    if not email or len(email) > subscriberEmailMaxLength or email.count("@") != 1:
+        raise ValueError("enter a valid email address")
+    localPart, domain = email.split("@")
+    if not localPart or "." not in domain or domain.startswith(".") or domain.endswith("."):
+        raise ValueError("enter a valid email address")
+    return email
 
 
 class AdminCredentials(BaseModel):
@@ -238,3 +251,64 @@ class SectionList(BaseModel):
     status: str
     editable: bool
     sections: list[SectionOut]
+
+
+class SubscriberCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    email: str = Field(min_length=1, max_length=320)
+    name: str = Field(default="", max_length=subscriberNameMaxLength)
+    source: str = Field(default="", max_length=subscriberSourceMaxLength)
+
+    @field_validator("email")
+    @classmethod
+    def validateEmail(cls, value: str) -> str:
+        return validateSubscriberEmail(value)
+
+    @field_validator("name", "source")
+    @classmethod
+    def trimStrings(cls, value: str) -> str:
+        return value.strip()
+
+
+class SubscriberUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=subscriberNameMaxLength)
+
+    @field_validator("name")
+    @classmethod
+    def trimName(cls, value: str) -> str:
+        trimmed = value.strip()
+        if not trimmed:
+            raise ValueError("name cannot be blank")
+        return trimmed
+
+
+class SubscriberOut(BaseModel):
+    email: str
+    name: str = ""
+    status: str
+    createdUnix: float
+    updatedUnix: float
+
+
+class SubscriberIssued(SubscriberOut):
+    token: str
+
+
+class SubscriberAdmin(BaseModel):
+    id: str
+    email: str
+    name: str = ""
+    status: str
+    clientIp: str = ""
+    source: str = ""
+    createdUnix: float
+    updatedUnix: float
+
+
+class SubscriberAdminList(BaseModel):
+    total: int
+    active: int
+    subscribers: list[SubscriberAdmin]

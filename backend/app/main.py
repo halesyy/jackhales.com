@@ -43,6 +43,11 @@ from .schemas import (
     SectionInsert,
     SectionList,
     SectionUpdate,
+    SubscriberAdminList,
+    SubscriberCreate,
+    SubscriberIssued,
+    SubscriberOut,
+    SubscriberUpdate,
 )
 from .security import (
     adminEmail,
@@ -57,6 +62,14 @@ from .security import (
 )
 from .seeding import applyPendingReseed, seedArticles, syncVersionedSeedArticles
 from .sitemap import buildSitemap
+from .subscribers import (
+    issueOrRefreshSubscriber,
+    listSubscribersForAdmin,
+    requireSubscriber,
+    serializeSubscriberOut,
+    unsubscribeSubscriber,
+    updateSubscriberName,
+)
 
 
 def slugify(value: str) -> str:
@@ -135,6 +148,10 @@ async def adminOnly(request: Request, database: AsyncIOMotorDatabase = Depends(d
 
 async def apiKeyOnly(request: Request, database: AsyncIOMotorDatabase = Depends(database)) -> dict:
     return await requireApiKeyRecord(database, request)
+
+
+async def subscriberOnly(request: Request, database: AsyncIOMotorDatabase = Depends(database)) -> dict:
+    return await requireSubscriber(database, request)
 
 
 async def saveArticleUpdate(database: AsyncIOMotorDatabase, existing: dict, update: dict) -> dict:
@@ -554,3 +571,40 @@ async def contentDeleteSection(
 ) -> dict:
     article = await loadEditableDraft(database, slug)
     return await saveBodyEdit(database, article, lambda body: deleteSection(body, sectionId))
+
+
+@app.post("/api/subscribers", response_model=SubscriberIssued, status_code=201)
+async def createSubscriber(
+    payload: SubscriberCreate,
+    request: Request,
+    database: AsyncIOMotorDatabase = Depends(database),
+) -> dict:
+    return await issueOrRefreshSubscriber(database, request, payload.email, payload.name, payload.source)
+
+
+@app.get("/api/subscribers/me", response_model=SubscriberOut)
+async def getSubscriberMe(record: dict = Depends(subscriberOnly)) -> dict:
+    return serializeSubscriberOut(record)
+
+
+@app.patch("/api/subscribers/me", response_model=SubscriberOut)
+async def updateSubscriberMe(
+    payload: SubscriberUpdate,
+    database: AsyncIOMotorDatabase = Depends(database),
+    record: dict = Depends(subscriberOnly),
+) -> dict:
+    updated = await updateSubscriberName(database, record, payload.name)
+    return serializeSubscriberOut(updated)
+
+
+@app.delete("/api/subscribers/me")
+async def deleteSubscriberMe(
+    database: AsyncIOMotorDatabase = Depends(database),
+    record: dict = Depends(subscriberOnly),
+) -> dict[str, bool]:
+    return await unsubscribeSubscriber(database, record)
+
+
+@app.get("/api/admin/subscribers", response_model=SubscriberAdminList, dependencies=[Depends(adminOnly)])
+async def adminListSubscribers(database: AsyncIOMotorDatabase = Depends(database)) -> dict:
+    return await listSubscribersForAdmin(database)

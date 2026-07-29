@@ -6,6 +6,7 @@ Jack Hales' personal site with:
 - Tailwind CSS
 - FastAPI backend
 - MongoDB-backed article system
+- Newsletter subscriptions with a token-based name update
 - Email/password-protected `/admin` with MongoDB-backed sessions
 - Docker Compose deployment behind Dokploy Traefik
 
@@ -60,6 +61,31 @@ See [docs/content-api.md](docs/content-api.md) for the full contract, the
 guardrail table, and the TypeScript definitions. The same operations are available
 through Plumb as `scripts/plumb services jackhales …`, and the `/jackhales` skill
 drives that adapter.
+
+## Newsletter
+
+A subscribe card sits at the bottom of every page for short updates and a note
+when a new article goes up. Subscribing stores the address in the `subscribers`
+collection with the client IP, the page they signed up from, and a `createdUnix`
+timestamp, then returns a token once.
+
+That token — and nothing else — lets the subscriber add their name afterwards, so
+the form never blocks on it:
+
+```sh
+curl -X PATCH https://api.jackhales.com/api/subscribers/me \
+  -H 'content-type: application/json' \
+  -H 'x-subscriber-token: jhs_live_…' \
+  -d '{"name":"A Reader"}'
+```
+
+Only the token's hash is stored. Subscribing again with an address already on the
+list rotates the token rather than reporting that it is already there, so the
+endpoint never confirms who is on the list. `/admin` shows the subscriber count
+alongside every email, name, signup date, source and IP.
+
+See [docs/newsletter.md](docs/newsletter.md) for the full contract and the
+guardrail table.
 
 ## Deployment
 

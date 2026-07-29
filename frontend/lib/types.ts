@@ -88,3 +88,38 @@ export type contentIdentity = {
   permissions: string[];
   restrictions: string[];
 };
+
+/** A newsletter subscriber, as seen by the subscriber themself via /subscribers and /subscribers/me. */
+export type subscriber = {
+  email: string;
+  /** Empty string, not null, when the subscriber hasn't given a name. */
+  name: string;
+  status: string;
+  /** Unix seconds (a float, not milliseconds and not an ISO string) — render with formatUnixDate. */
+  createdUnix: number;
+  updatedUnix: number;
+};
+
+/** Returned once, at signup. The token authenticates later /subscribers/me requests; subscribing again with the same address rotates it, which is how a lost one is replaced. */
+export type subscriberIssued = subscriber & { token: string };
+
+/** A subscriber as seen from the admin listing — includes fields the subscriber themself never sees. */
+export type adminSubscriber = {
+  id: string;
+  email: string;
+  /** Empty string, not null, when the subscriber hasn't given a name. */
+  name: string;
+  status: string;
+  /** IP address the signup request came from. */
+  clientIp: string;
+  /** The page path sent at signup (e.g. "/", "/articles/some-post"). Empty string, not null, if none was sent. */
+  source: string;
+  createdUnix: number;
+  updatedUnix: number;
+};
+
+export type adminSubscriberList = {
+  total: number;
+  active: number;
+  subscribers: adminSubscriber[];
+};
