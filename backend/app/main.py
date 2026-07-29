@@ -143,7 +143,7 @@ async def saveArticleUpdate(database: AsyncIOMotorDatabase, existing: dict, upda
     try:
         await database.articles.update_one({"_id": existing["_id"]}, {"$set": update})
     except DuplicateKeyError as error:
-        raise HTTPException(status_code=409, detail=f"the slug '{update['slug']}' is already taken") from error
+        raise HTTPException(status_code=409, detail=f"the slug '{update.get('slug', '')}' is already taken") from error
 
     updatedSlug = update.get("slug", existing["slug"])
     if updatedSlug != existing["slug"]:

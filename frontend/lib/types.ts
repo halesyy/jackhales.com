@@ -86,12 +86,3 @@ export type contentIdentity = {
   permissions: string[];
   restrictions: string[];
 };
-
-export const emptyArticleSeo: articleSeo = {
-  metaTitle: null,
-  metaDescription: null,
-  canonicalUrl: null,
-  keywords: [],
-  ogImageUrl: null,
-  noIndex: false,
-};
