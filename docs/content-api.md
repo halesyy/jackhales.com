@@ -106,6 +106,55 @@ including its blank-line spacing, is preserved byte for byte.
 
 `PATCH` accepts `clearHeroImage: true` to remove the hero image.
 
+## Body Formatting
+
+`bodyMarkdown` is GitHub-flavoured Markdown. Two shapes get extra treatment when
+the site renders them.
+
+### Images
+
+**A key cannot upload an image.** `POST /api/admin/images` requires an admin
+session, so a picture enters the library only when it is pasted or dropped into
+the editor. A key may reference an image that already exists; it must never
+invent a URL, because a guessed one renders as a broken image.
+
+```markdown
+![A revenue chart broken down by region](https://api.jackhales.com/api/images/70486bca…?w=1800&h=1013 "Revenue by region, FY2026")
+```
+
+The alt text is the description for someone who cannot see the image; only a
+decorative image gets an empty `![]`. The optional title renders as a
+`<figcaption>`. An image alone on its own line becomes a `<figure>`; inside a
+sentence it stays inline. `heroImage.url` takes the same kind of URL.
+
+Uploaded image URLs are content addressed — the id is a digest of the bytes, so
+a URL never changes meaning, is cached for a year, and is safe to reuse across
+articles. The `?w=…&h=…` pair is the stored size and lets the page reserve the
+space before the bytes arrive; preserve it, or the article shifts as it loads.
+
+### Tables
+
+Plain GFM, no custom syntax:
+
+```markdown
+| Region | Revenue | Growth | Notes             |
+| ------ | ------: | :----: | ----------------- |
+| Sydney | 1,200   | 12%    | Strongest quarter |
+| Perth  | 940     | 4%     | Flat on last year |
+```
+
+The renderer puts a table in a panel that scrolls inside its own box, so a wide
+table never pushes the page sideways. `:---` is left, `:---:` centre, `---:`
+right; a column whose every body value is a number is right-aligned
+automatically, so declare an alignment on a numeric column only to override that.
+The header row is required, a literal pipe in a cell is escaped as `\|`, and
+cells take inline Markdown but not lists or paragraphs. GFM has no table caption
+— use a short italic line underneath.
+
+Pad the columns as shown. `/admin` has a visual table editor that writes padded
+GFM, so matching it keeps a later round trip through that grid from producing a
+whitespace-only diff.
+
 ## AI Attribution
 
 Any write made with an API key sets `aiAssisted` to `true` on that article. The

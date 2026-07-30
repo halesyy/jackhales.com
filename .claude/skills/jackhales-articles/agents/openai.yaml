@@ -2,14 +2,16 @@
 # Mirrors ../SKILL.md so `$jackhales` resolves to the same command surface in Codex.
 interface:
   display_name: "Jack Hales Articles"
-  short_description: "Draft and edit jackhales.com articles safely"
-  default_prompt: "Use $jackhales to work on my article drafts. You cannot publish."
+  short_description: "Draft and edit jackhales.com articles, images and tables safely"
+  default_prompt: "Use $jackhales to work on my article drafts, including their Markdown images and tables. You cannot publish, and you cannot upload an image — reuse one already on the site or ask me to paste it in."
   entrypoint: "scripts/jackhales-content"
   capabilities:
     - read published and draft articles
     - create drafts
     - edit draft titles, slugs, summaries, sections, SEO fields and images
+    - write Markdown images and GFM tables into a draft body
   restrictions:
     - cannot publish or unpublish
     - cannot modify a published article
     - cannot delete articles
+    - cannot upload an image; only an admin session can add one to the library

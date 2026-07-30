@@ -103,6 +103,56 @@ scripts/jackhales-content set SLUG \
 set them when they should differ. Image and canonical URLs must start with
 `https://`, `http://` or `/`. Use `--clear-hero-image` to remove a hero image.
 
+## Images In The Body
+
+**You cannot upload an image.** Uploading is admin-only, so a picture enters the
+library only when Jack pastes or drops one into the editor. Never invent an image
+URL — a guessed one renders as a broken image on a published page.
+
+Use a URL that already appears in an article (`read SLUG --raw`), a file the site
+already ships such as `/oman.jpeg`, or one Jack gives you after pasting the image
+into `/admin`. If a section needs a picture that does not exist yet, write the
+section without it and tell Jack what to paste and where.
+
+```markdown
+![A revenue chart broken down by region](https://api.jackhales.com/api/images/70486bca…?w=1800&h=1013 "Revenue by region, FY2026")
+```
+
+- The alt text describes the image for someone who cannot see it — a sentence
+  about the content, not "image of a chart". Only a decorative image gets `![]`.
+- The optional title renders as a visible caption under the image.
+- An image alone on its line becomes a figure; inside a sentence it stays inline.
+- Uploaded URLs carry `?w=…&h=…`. **Keep them.** They are the real dimensions and
+  let the page reserve space; stripping them makes the article jump as it loads.
+- The id is a digest of the bytes, so a URL never changes meaning and the same
+  one can be reused across articles.
+
+## Tables In The Body
+
+Plain GitHub-flavoured Markdown — there is no custom syntax. The site renders a
+table into a panel that scrolls inside its own box, so a wide one never pushes
+the page sideways.
+
+```markdown
+| Region | Revenue | Growth | Notes             |
+| ------ | ------: | :----: | ----------------- |
+| Sydney | 1,200   | 12%    | Strongest quarter |
+| Perth  | 940     | 4%     | Flat on last year |
+```
+
+- `:---` left, `:---:` centre, `---:` right.
+- A column whose every value is a number is right-aligned automatically —
+  currency symbols, thousands separators and percentages count. Declare an
+  alignment on a numeric column only to override that.
+- The header row is required. A literal pipe in a cell must be escaped as `\|`.
+- Cells take inline Markdown — bold, links, code — but not lists or paragraphs.
+- GFM has no table caption; put a short italic line underneath if one is needed.
+- Keep to roughly six columns. Past that a reader scrolls more than they read.
+
+Pad the columns as shown. `/admin` has a visual table editor that writes padded
+GFM, so matching it keeps a later round trip through that grid from producing a
+diff that is all whitespace.
+
 ## Verify And Hand Back
 
 After applying, re-read the article and confirm the change landed and nothing
