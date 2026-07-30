@@ -1,8 +1,9 @@
-import { Bold, Code2, Heading1, ImageIcon, Italic, Link2, List, Quote, RotateCcw, Save, Send, Table } from "lucide-react";
+import { Bold, Code2, Eye, Heading1, ImageIcon, Italic, Link2, List, Quote, RotateCcw, Save, Send, Table } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 
 import { imageFilesFrom, imageMarkdown } from "../lib/images";
 import { emptyTable, formatTable, replaceTable, tableAtOffset, type markdownTable } from "../lib/markdownTable";
+import { previewPath, savePreviewDraft } from "../lib/previewDraft";
 import type { articleDetail, articleImage, articleSeo, imageAsset } from "../lib/types";
 import { useImageLibrary } from "../lib/useImageLibrary";
 import { ArticleImageLibrary } from "./ArticleImageLibrary";
@@ -68,6 +69,7 @@ export function ArticleForm({ article, mode, onSubmit, onCancel }: articleFormPr
 
   const bodyRef = useRef<HTMLTextAreaElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const previewWindow = useRef<Window | null>(null);
   const library = useImageLibrary(true);
 
   const generatedSlug = useMemo(() => slugify(title), [title]);
@@ -143,6 +145,48 @@ export function ArticleForm({ article, mode, onSubmit, onCancel }: articleFormPr
     setAutomaticSlug(true);
   }
 
+  /** The one place the form's fields become an article, so a preview cannot drift from a save. */
+  function currentPayload(resolvedStatus: "draft" | "published"): articlePayload {
+    return {
+      title: title.trim(),
+      slug: computedSlug,
+      summary: summary.trim(),
+      bodyMarkdown,
+      publishedAt: isoFromInput(publishedAt),
+      status: resolvedStatus,
+      aiAssisted,
+      seo: {
+        metaTitle: optionalText(metaTitle),
+        metaDescription: optionalText(metaDescription),
+        canonicalUrl: optionalText(canonicalUrl),
+        keywords: keywords.split(",").map((keyword) => keyword.trim()).filter(Boolean),
+        ogImageUrl: optionalText(ogImageUrl),
+        noIndex,
+      },
+      heroImage: heroImageUrl.trim() ? { url: heroImageUrl.trim(), alt: heroImageAlt.trim() } : null,
+    };
+  }
+
+  /**
+   * Preview what is in the form right now, saved or not.
+   *
+   * An already-open preview tab picks the new draft up from its own storage
+   * listener, so it is focused rather than reloaded — reloading would throw away
+   * the width the user had chosen.
+   */
+  function openPreview() {
+    if (!savePreviewDraft(currentPayload(status), status)) {
+      setFormError("The preview needs browser storage, which this window has blocked.");
+      return;
+    }
+    setFormError("");
+    if (previewWindow.current && !previewWindow.current.closed) {
+      previewWindow.current.focus();
+      return;
+    }
+    previewWindow.current = window.open(previewPath, "jackhalesPreview");
+  }
+
   async function submit(nextStatus?: "draft" | "published") {
     if (!canSubmit) {
       setFormError("Add a title so the article has a valid slug before saving.");
@@ -153,24 +197,7 @@ export function ArticleForm({ article, mode, onSubmit, onCancel }: articleFormPr
     setFormError("");
     try {
       const resolvedStatus = nextStatus || status;
-      await onSubmit({
-        title: title.trim(),
-        slug: computedSlug,
-        summary: summary.trim(),
-        bodyMarkdown,
-        publishedAt: isoFromInput(publishedAt),
-        status: resolvedStatus,
-        aiAssisted,
-        seo: {
-          metaTitle: optionalText(metaTitle),
-          metaDescription: optionalText(metaDescription),
-          canonicalUrl: optionalText(canonicalUrl),
-          keywords: keywords.split(",").map((keyword) => keyword.trim()).filter(Boolean),
-          ogImageUrl: optionalText(ogImageUrl),
-          noIndex,
-        },
-        heroImage: heroImageUrl.trim() ? { url: heroImageUrl.trim(), alt: heroImageAlt.trim() } : null,
-      });
+      await onSubmit(currentPayload(resolvedStatus));
       setStatus(resolvedStatus);
     } catch (error) {
       setFormError(error instanceof Error ? error.message : "Unable to save the article.");
@@ -349,6 +376,7 @@ export function ArticleForm({ article, mode, onSubmit, onCancel }: articleFormPr
       <div className="editor-actions">
         <button type="button" className="button button-outline" disabled={saving} onClick={onCancel}>Cancel</button>
         <div>
+          <button type="button" className="button button-outline" onClick={openPreview}><Eye size={16} /> Preview</button>
           <button type="button" className="button button-outline" disabled={saving || !canSubmit} onClick={() => submit("draft")}><Save size={16} /> Save draft</button>
           <button type="button" className="button button-dark" disabled={saving || !canSubmit} onClick={() => submit("published")}><Send size={16} /> {saving ? "Saving…" : "Publish"}</button>
         </div>

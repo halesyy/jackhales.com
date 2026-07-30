@@ -37,6 +37,18 @@ export type imageAssetList = {
   images: imageAsset[];
 };
 
+/** Everything an article page actually renders — shared by the live page and the admin preview. */
+export type articleRenderable = {
+  title: string;
+  slug: string;
+  summary: string;
+  bodyMarkdown: string;
+  publishedAt: string;
+  aiAssisted: boolean;
+  seo: articleSeo;
+  heroImage: articleImage | null;
+};
+
 export type articleSummary = {
   id: string;
   title: string;

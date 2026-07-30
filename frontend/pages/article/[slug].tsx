@@ -1,16 +1,10 @@
-import { ArrowLeft, CalendarDays, Eye, UserRound } from "lucide-react";
 import type { GetStaticPaths, GetStaticProps } from "next";
 import Head from "next/head";
-import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import { AiAssistedBadge } from "../../components/AiAssistedBadge";
-import { MarkdownContent } from "../../components/MarkdownContent";
-import { Reveal } from "../../components/Motion";
+import { ArticleView } from "../../components/ArticleView";
 import { SiteShell } from "../../components/SiteShell";
 import { fetchArticle, fetchArticles, recordArticleView } from "../../lib/api";
-import { formatDate } from "../../lib/date";
-import { imageDimensionsFrom } from "../../lib/images";
 import type { articleDetail } from "../../lib/types";
 
 type articlePageProps = { article: articleDetail };
@@ -48,7 +42,6 @@ export default function ArticlePage({ article }: articlePageProps) {
   const metaTitle = seo?.metaTitle || `${article.title} — Jack Hales`;
   const metaDescription = seo?.metaDescription || article.summary;
   const socialImage = seo?.ogImageUrl || article.heroImage?.url || null;
-  const heroSize = article.heroImage ? imageDimensionsFrom(article.heroImage.url) : null;
 
   useEffect(() => {
     let active = true;
@@ -82,36 +75,7 @@ export default function ArticlePage({ article }: articlePageProps) {
         <meta property="article:published_time" content={article.publishedAt} />
       </Head>
 
-      <Reveal className="article-hero">
-        <Link href="/articles" className="back-link"><ArrowLeft size={15} /> All writing</Link>
-        <p className="eyebrow">Research & writing</p>
-        <h1>{article.title}</h1>
-        {article.summary ? <p className="article-deck">{article.summary}</p> : null}
-        <div className="article-byline">
-          <span><UserRound size={15} /> Jack Hales</span>
-          <span><CalendarDays size={15} /> {formatDate(article.publishedAt)}</span>
-          <span aria-live="polite"><Eye size={15} /> {views === null ? "Loading views" : `${views.toLocaleString()} ${views === 1 ? "view" : "views"}`}</span>
-          {article.aiAssisted ? <AiAssistedBadge /> : null}
-        </div>
-      </Reveal>
-
-      {article.heroImage ? (
-        <Reveal className="article-hero-image" delay={0.05} viewportAmount="some">
-          {/* Hero images come from the article record and can be any external host. */}
-          <img
-            src={article.heroImage.url}
-            alt={article.heroImage.alt}
-            width={heroSize?.width}
-            height={heroSize?.height}
-            loading="lazy"
-          />
-          {article.heroImage.caption ? <figcaption>{article.heroImage.caption}</figcaption> : null}
-        </Reveal>
-      ) : null}
-
-      <Reveal className="article-paper card" delay={0.1} viewportAmount="some">
-        <MarkdownContent markdown={article.bodyMarkdown} />
-      </Reveal>
+      <ArticleView article={article} views={views} />
     </SiteShell>
   );
 }

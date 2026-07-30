@@ -8,6 +8,7 @@ Jack Hales' personal site with:
 - MongoDB-backed article system
 - Paste-to-upload article images with a managed alt-text library
 - Markdown tables with a visual table editor in `/admin`
+- Full-page draft preview at real device widths
 - Newsletter subscriptions with a token-based name update
 - Email/password-protected `/admin` with MongoDB-backed sessions
 - Docker Compose deployment behind Dokploy Traefik
@@ -63,6 +64,25 @@ See [docs/content-api.md](docs/content-api.md) for the full contract, the
 guardrail table, and the TypeScript definitions. The same operations are available
 through Plumb as `scripts/plumb services jackhales …`, and the `/jackhales` skill
 drives that adapter.
+
+## Draft Preview
+
+**Preview** in the editor opens `/admin/preview` in its own tab, showing the
+article exactly as a reader would see it — including edits that have not been
+saved yet. The draft travels through `localStorage` rather than the URL, so an
+unpublished article never reaches browser history or a server log. Pressing
+Preview again updates the tab that is already open instead of piling up new ones.
+
+The article is rendered by `ArticleView`, the same component the published page
+uses, so the preview cannot drift from production. It sits inside an iframe so
+the Desktop/Tablet/Phone widths are real viewports and the site's own breakpoints
+actually fire — a width-constrained `div` would show desktop styling at phone
+width and quietly lie about the thing most worth checking.
+
+The bar also carries a search-result preview with title and description length
+guidance, from the same fallbacks the live page uses. `/admin` and everything
+under it is `Disallow`ed in `robots.txt`, and the preview page sends
+`noindex, nofollow`.
 
 ## Images
 
