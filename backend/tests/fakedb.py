@@ -44,14 +44,21 @@ class FakeCollection:
     def select(self, query: dict) -> list[dict]:
         return [document for document in self.documents if self.matches(document, query)]
 
+    @staticmethod
+    def project(document: dict, projection: dict | None) -> dict:
+        """Mongo's two projection modes: name the fields to keep, or the ones to drop."""
+        if not projection:
+            return deepcopy(document)
+        if any(projection.values()):
+            return {key: deepcopy(document[key]) for key, included in projection.items() if included and key in document}
+        return {key: deepcopy(value) for key, value in document.items() if projection.get(key, 1)}
+
     def find(self, query: dict | None = None, projection: dict | None = None) -> FakeCursor:
-        return FakeCursor([deepcopy(document) for document in self.select(query or {})])
+        return FakeCursor([self.project(document, projection) for document in self.select(query or {})])
 
     async def find_one(self, query: dict, projection: dict | None = None) -> dict | None:
         for document in self.select(query):
-            if projection:
-                return {key: document[key] for key, included in projection.items() if included and key in document}
-            return deepcopy(document)
+            return self.project(document, projection)
         return None
 
     async def insert_one(self, document: dict) -> FakeResult:

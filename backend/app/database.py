@@ -34,6 +34,7 @@ async def ensureIndexes() -> None:
     await database.subscribers.create_index("email", unique=True)
     await database.subscribers.create_index("tokenHash", unique=True)
     await database.subscribers.create_index([("createdUnix", -1)])
+    await database.articleImages.create_index([("createdUnix", -1)])
 
 
 async def closeClient() -> None:

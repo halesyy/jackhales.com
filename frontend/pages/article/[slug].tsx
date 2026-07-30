@@ -10,6 +10,7 @@ import { Reveal } from "../../components/Motion";
 import { SiteShell } from "../../components/SiteShell";
 import { fetchArticle, fetchArticles, recordArticleView } from "../../lib/api";
 import { formatDate } from "../../lib/date";
+import { imageDimensionsFrom } from "../../lib/images";
 import type { articleDetail } from "../../lib/types";
 
 type articlePageProps = { article: articleDetail };
@@ -47,6 +48,7 @@ export default function ArticlePage({ article }: articlePageProps) {
   const metaTitle = seo?.metaTitle || `${article.title} — Jack Hales`;
   const metaDescription = seo?.metaDescription || article.summary;
   const socialImage = seo?.ogImageUrl || article.heroImage?.url || null;
+  const heroSize = article.heroImage ? imageDimensionsFrom(article.heroImage.url) : null;
 
   useEffect(() => {
     let active = true;
@@ -96,7 +98,13 @@ export default function ArticlePage({ article }: articlePageProps) {
       {article.heroImage ? (
         <Reveal className="article-hero-image" delay={0.05} viewportAmount="some">
           {/* Hero images come from the article record and can be any external host. */}
-          <img src={article.heroImage.url} alt={article.heroImage.alt} loading="lazy" />
+          <img
+            src={article.heroImage.url}
+            alt={article.heroImage.alt}
+            width={heroSize?.width}
+            height={heroSize?.height}
+            loading="lazy"
+          />
           {article.heroImage.caption ? <figcaption>{article.heroImage.caption}</figcaption> : null}
         </Reveal>
       ) : null}

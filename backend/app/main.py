@@ -27,6 +27,18 @@ from .content import (
     summarizeSections,
 )
 from .database import closeClient, ensureIndexes, getDatabase
+from .images import (
+    ImageError,
+    deleteImage,
+    imageCacheSeconds,
+    listImages,
+    maxImageBytes,
+    readImage,
+    serializeImage,
+    setImageAlt,
+    storeImage,
+    storedByteTotal,
+)
 from .schemas import (
     AdminCredentials,
     ApiKeyIssued,
@@ -40,6 +52,9 @@ from .schemas import (
     DraftBody,
     DraftCreate,
     DraftUpdate,
+    ImageAltUpdate,
+    ImageAsset,
+    ImageAssetList,
     SectionInsert,
     SectionList,
     SectionUpdate,
@@ -105,6 +120,12 @@ def serializeArticle(document: dict) -> dict:
         "createdAt": document["createdAt"],
         "updatedAt": document["updatedAt"],
     }
+
+
+def apiBaseUrl(request: Request) -> str:
+    """Where this API answers, so a stored image URL keeps working after a deploy."""
+    configured = str(settings["publicApiUrl"])
+    return configured or f"{str(request.base_url).rstrip('/')}/api"
 
 
 def serializeSummary(document: dict) -> dict:
@@ -269,6 +290,88 @@ async def recordArticleView(request: Request, slug: str, database: AsyncIOMotorD
 
     views = await database.articleViews.count_documents({"articleSlug": slug})
     return {"views": views, "counted": counted}
+
+
+@app.get("/api/images/{imageId}", response_class=Response)
+async def getImage(imageId: str, database: AsyncIOMotorDatabase = Depends(database)) -> Response:
+    """Serve a stored image. The id is a digest of the bytes, so this can never go stale."""
+    record = await readImage(database, imageId)
+    if not record:
+        raise HTTPException(status_code=404, detail="image not found")
+    return Response(
+        content=bytes(record["data"]),
+        media_type=record.get("contentType", "application/octet-stream"),
+        headers={
+            "Cache-Control": f"public, max-age={imageCacheSeconds}, immutable",
+            "Content-Disposition": "inline",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@app.post("/api/admin/images", response_model=ImageAsset, dependencies=[Depends(adminOnly)])
+async def uploadImage(request: Request, database: AsyncIOMotorDatabase = Depends(database)) -> dict:
+    """Take raw image bytes from the editor and hand back the URL to write into Markdown.
+
+    The body is the file itself rather than a multipart form: the editor already
+    holds the bytes after a paste, and the declared content type is ignored in
+    favour of what the bytes actually prove they are.
+    """
+    declaredLength = int(request.headers.get("content-length") or 0)
+    if declaredLength > maxImageBytes:
+        raise HTTPException(status_code=413, detail=f"images must be {maxImageBytes // (1024 * 1024)}MB or smaller")
+
+    data = await request.body()
+    try:
+        stored = await storeImage(
+            database,
+            data,
+            request.headers.get("x-image-filename", ""),
+            request.headers.get("x-image-alt", ""),
+            await authenticatedAdminEmail(database, request) or "",
+        )
+    except ImageError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    return serializeImage(stored, apiBaseUrl(request))
+
+
+@app.get("/api/admin/images", response_model=ImageAssetList, dependencies=[Depends(adminOnly)])
+async def adminListImages(request: Request, database: AsyncIOMotorDatabase = Depends(database)) -> dict:
+    images = await listImages(database)
+    bytesUsed = await storedByteTotal(database)
+    budget = int(settings["imageStorageMaxBytes"])
+    return {
+        "total": len(images),
+        "bytesUsed": bytesUsed,
+        "bytesAvailable": max(budget - bytesUsed, 0),
+        "images": [serializeImage(image, apiBaseUrl(request)) for image in images],
+    }
+
+
+@app.patch("/api/admin/images/{imageId}", response_model=ImageAsset, dependencies=[Depends(adminOnly)])
+async def adminUpdateImageAlt(
+    imageId: str,
+    payload: ImageAltUpdate,
+    request: Request,
+    database: AsyncIOMotorDatabase = Depends(database),
+) -> dict:
+    if not await readImage(database, imageId):
+        raise HTTPException(status_code=404, detail="image not found")
+    return serializeImage(await setImageAlt(database, imageId, payload.alt), apiBaseUrl(request))
+
+
+@app.delete("/api/admin/images/{imageId}", dependencies=[Depends(adminOnly)])
+async def adminDeleteImage(imageId: str, database: AsyncIOMotorDatabase = Depends(database)) -> dict[str, bool]:
+    """Remove an image only once nothing points at it, so no article loses a picture."""
+    if not await readImage(database, imageId):
+        raise HTTPException(status_code=404, detail="image not found")
+    referencing = await deleteImage(database, imageId)
+    if referencing:
+        raise HTTPException(
+            status_code=409,
+            detail=f"this image is still used by {', '.join(referencing)}; remove it there first",
+        )
+    return {"deleted": True}
 
 
 @app.get("/api/sitemap", response_class=Response)

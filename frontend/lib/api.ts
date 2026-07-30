@@ -1,4 +1,4 @@
-import type { articleDetail, articleSummary, articleViewCount, subscriber, subscriberIssued } from "./types";
+import type { articleDetail, articleSummary, articleViewCount, imageAsset, imageAssetList, subscriber, subscriberIssued } from "./types";
 
 export function apiBaseUrl(): string {
   if (typeof window === "undefined") {
@@ -11,16 +11,28 @@ export function apiBaseUrl(): string {
 export class apiError extends Error {
   status: number;
 
-  constructor(status: number) {
-    super(`API request failed: ${status}`);
+  constructor(status: number, detail = "") {
+    super(detail || `API request failed: ${status}`);
     this.name = "apiError";
     this.status = status;
   }
 }
 
+/** The API explains its refusals in `detail`; showing that beats showing a bare status code. */
+async function readErrorDetail(response: Response): Promise<string> {
+  try {
+    const body = (await response.json()) as { detail?: unknown };
+    if (typeof body.detail === "string") return body.detail;
+    if (Array.isArray(body.detail) && typeof body.detail[0]?.msg === "string") return body.detail[0].msg as string;
+  } catch {
+    // A non-JSON error body just leaves the status to speak for itself.
+  }
+  return "";
+}
+
 async function parseJson<T>(response: Response): Promise<T> {
   if (!response.ok) {
-    throw new apiError(response.status);
+    throw new apiError(response.status, await readErrorDetail(response));
   }
   return response.json() as Promise<T>;
 }
@@ -70,6 +82,35 @@ export async function adminFetch<T>(path: string, init?: RequestInit): Promise<T
     ...init,
   });
   return parseJson<T>(response);
+}
+
+export async function fetchImageLibrary(): Promise<imageAssetList> {
+  return adminFetch<imageAssetList>("/admin/images");
+}
+
+/** Sends the file itself as the request body — the editor already holds the bytes after a paste. */
+export async function uploadImage(file: Blob, filename: string, alt = ""): Promise<imageAsset> {
+  const headers: Record<string, string> = {
+    "content-type": file.type || "application/octet-stream",
+    "X-Image-Filename": asciiHeader(filename),
+  };
+  if (alt.trim()) headers["X-Image-Alt"] = asciiHeader(alt);
+
+  const response = await fetchApi("/admin/images", { method: "POST", credentials: "include", headers, body: file });
+  return parseJson<imageAsset>(response);
+}
+
+export async function updateImageAlt(imageId: string, alt: string): Promise<imageAsset> {
+  return adminFetch<imageAsset>(`/admin/images/${imageId}`, { method: "PATCH", body: JSON.stringify({ alt }) });
+}
+
+export async function deleteImage(imageId: string): Promise<{ deleted: true }> {
+  return adminFetch<{ deleted: true }>(`/admin/images/${imageId}`, { method: "DELETE" });
+}
+
+/** Header values must be latin-1, so a filename or alt text with an emoji cannot be sent verbatim. */
+function asciiHeader(value: string): string {
+  return value.replace(/[^\x20-\x7e]+/g, "").trim().slice(0, 300);
 }
 
 export async function subscribeToUpdates(payload: { email: string; name?: string; source?: string }): Promise<subscriberIssued> {

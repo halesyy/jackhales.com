@@ -6,6 +6,8 @@ Jack Hales' personal site with:
 - Tailwind CSS
 - FastAPI backend
 - MongoDB-backed article system
+- Paste-to-upload article images with a managed alt-text library
+- Markdown tables with a visual table editor in `/admin`
 - Newsletter subscriptions with a token-based name update
 - Email/password-protected `/admin` with MongoDB-backed sessions
 - Docker Compose deployment behind Dokploy Traefik
@@ -61,6 +63,49 @@ See [docs/content-api.md](docs/content-api.md) for the full contract, the
 guardrail table, and the TypeScript definitions. The same operations are available
 through Plumb as `scripts/plumb services jackhales …`, and the `/jackhales` skill
 drives that adapter.
+
+## Images
+
+Paste or drop an image into the editor's Markdown box and it is resized to at
+most 1800px wide, re-encoded as WebP in the browser, uploaded, and inserted as
+ordinary Markdown — a 3 MB pasted screenshot lands as roughly 20 KB. Animated
+GIFs are sent through untouched so they keep moving.
+
+Images are content addressed: the id is a digest of the bytes, so the same
+picture pasted twice is stored once and every URL is immutable and cached for a
+year. Uploaded URLs carry the dimensions (`?w=1800&h=1013`) so a figure reserves
+its space before the bytes arrive.
+
+The **Images** block under the editor lists everything stored, with the alt text
+kept next to the picture it describes — set it once and every later insert of
+that image starts out described. An image can be inserted, copied, made the hero
+image, or removed; removal is refused while any article still references it.
+
+Uploads are admin-only and bounded: 8 MB per image, PNG/JPEG/GIF/WebP only
+(sniffed from the bytes, never from the declared content type), and a library
+ceiling set by `IMAGE_STORAGE_MAX_BYTES` (256 MB by default) so images cannot
+fill the MongoDB volume. `PUBLIC_API_URL` is the single place image URLs are
+built from.
+
+Add a caption with Markdown's image title, which renders as a `<figcaption>`:
+
+```markdown
+![A revenue chart](https://api.jackhales.com/api/images/70486bca…?w=1800&h=1013 "Revenue by region, FY2026")
+```
+
+## Tables
+
+Article tables are plain GitHub-flavoured Markdown. On the frontend they render
+into a rounded, scrollable panel that never pushes the page sideways — a wide
+table scrolls inside its own box, down to a 320px viewport. `:---`, `:---:` and
+`---:` alignment is honoured, and a column whose every value is a number is
+right-aligned automatically so the digits line up.
+
+The editor's table button opens a grid over whichever table the cursor is in, or
+builds a new one: edit cells, add and remove rows and columns, set per-column
+alignment, and see the Markdown it will write before applying. It writes back
+padded GFM, so a table built there can still be edited by hand or by the content
+API afterwards.
 
 ## Newsletter
 

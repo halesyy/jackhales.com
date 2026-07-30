@@ -8,6 +8,7 @@ publicationFields = ("status", "publish", "published", "publishedState")
 # declare it — an agent must not be able to hide or claim its own involvement.
 automaticFields = ("aiAssisted",)
 maxKeywords = 25
+imageAltMaxLength = 300
 subscriberEmailMaxLength = 254
 subscriberNameMaxLength = 120
 subscriberSourceMaxLength = 200
@@ -140,6 +141,34 @@ class ArticleSummary(BaseModel):
     status: str
     aiAssisted: bool = False
     updatedAt: datetime
+
+
+class ImageAsset(BaseModel):
+    """A stored image. `url` is content addressed, so it never changes meaning."""
+
+    id: str
+    url: str
+    contentType: str
+    width: int
+    height: int
+    byteSize: int
+    alt: str = ""
+    filename: str = ""
+    createdUnix: float
+    updatedUnix: float
+
+
+class ImageAssetList(BaseModel):
+    total: int
+    bytesUsed: int
+    bytesAvailable: int
+    images: list[ImageAsset]
+
+
+class ImageAltUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    alt: str = Field(default="", max_length=imageAltMaxLength)
 
 
 class ApiKeyRequest(BaseModel):

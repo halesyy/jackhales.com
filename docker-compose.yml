@@ -60,6 +60,10 @@ services:
       MONGODB_DATABASE: ${MONGODB_DATABASE:-jackhales}
       SESSION_SECRET: ${SESSION_SECRET}
       PUBLIC_SITE_URL: https://jackhales.com
+      # Image URLs are written into article Markdown, so they are built from this
+      # rather than from the request — a proxied request cannot be trusted to
+      # report the public scheme, and an http:// URL would be blocked on the page.
+      PUBLIC_API_URL: https://api.jackhales.com/api
       CORS_ORIGINS: https://jackhales.com,https://www.jackhales.com
     labels:
       - traefik.enable=true

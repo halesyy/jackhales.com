@@ -1,8 +1,13 @@
-import { Bold, Code2, Heading1, Italic, Link2, List, Quote, RotateCcw, Save, Send } from "lucide-react";
-import { useMemo, useState } from "react";
+import { Bold, Code2, Heading1, ImageIcon, Italic, Link2, List, Quote, RotateCcw, Save, Send, Table } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
 
-import type { articleDetail, articleImage, articleSeo } from "../lib/types";
+import { imageFilesFrom, imageMarkdown } from "../lib/images";
+import { emptyTable, formatTable, replaceTable, tableAtOffset, type markdownTable } from "../lib/markdownTable";
+import type { articleDetail, articleImage, articleSeo, imageAsset } from "../lib/types";
+import { useImageLibrary } from "../lib/useImageLibrary";
+import { ArticleImageLibrary } from "./ArticleImageLibrary";
 import { MarkdownContent } from "./MarkdownContent";
+import { TableBuilder } from "./TableBuilder";
 
 type articleFormProps = {
   article?: articleDetail;
@@ -10,6 +15,8 @@ type articleFormProps = {
   onSubmit: (article: articlePayload) => Promise<void>;
   onCancel: () => void;
 };
+
+type tableEdit = { table: markdownTable; mode: "insert" | "edit"; offset: number };
 
 export type articlePayload = {
   title: string;
@@ -57,20 +64,73 @@ export function ArticleForm({ article, mode, onSubmit, onCancel }: articleFormPr
   const [heroImageAlt, setHeroImageAlt] = useState(article?.heroImage?.alt || "");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
+  const [editingTable, setEditingTable] = useState<tableEdit | null>(null);
+
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const library = useImageLibrary(true);
 
   const generatedSlug = useMemo(() => slugify(title), [title]);
   const computedSlug = automaticSlug ? generatedSlug : slug;
   const canSubmit = Boolean(title.trim() && computedSlug && publishedAt);
 
+  function focusBody(caret?: number) {
+    requestAnimationFrame(() => {
+      const textarea = bodyRef.current;
+      if (!textarea) return;
+      textarea.focus();
+      if (caret !== undefined) textarea.setSelectionRange(caret, caret);
+    });
+  }
+
   function insertToken(before: string, after = "") {
-    const textarea = document.querySelector<HTMLTextAreaElement>("#bodyMarkdown");
+    const textarea = bodyRef.current;
     if (!textarea) return;
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
+    const { selectionStart: start, selectionEnd: end } = textarea;
     const selected = bodyMarkdown.slice(start, end);
-    const next = `${bodyMarkdown.slice(0, start)}${before}${selected}${after}${bodyMarkdown.slice(end)}`;
+    setBodyMarkdown(`${bodyMarkdown.slice(0, start)}${before}${selected}${after}${bodyMarkdown.slice(end)}`);
+    focusBody(start + before.length + selected.length);
+  }
+
+  /** Drop a block on its own lines, keeping one blank line either side of it. */
+  function insertBlock(block: string, offset = bodyRef.current?.selectionStart ?? bodyMarkdown.length) {
+    const at = Math.min(Math.max(offset, 0), bodyMarkdown.length);
+    const before = bodyMarkdown.slice(0, at).replace(/\n*$/, "");
+    const after = bodyMarkdown.slice(at).replace(/^\n*/, "");
+    const lead = before ? `${before}\n\n` : "";
+    const next = `${lead}${block}${after ? `\n\n${after}` : "\n"}`;
     setBodyMarkdown(next);
-    requestAnimationFrame(() => textarea.focus());
+    focusBody(lead.length + block.length);
+  }
+
+  async function uploadAndInsert(files: File[]) {
+    const offset = bodyRef.current?.selectionStart ?? bodyMarkdown.length;
+    const stored = await library.uploadFiles(files);
+    if (!stored.length) return;
+    insertBlock(stored.map((image) => imageMarkdown(image.url, image.alt)).join("\n\n"), offset);
+  }
+
+  function browseForImages() {
+    fileInput.current?.click();
+  }
+
+  function useAsHero(image: imageAsset) {
+    setHeroImageUrl(image.url);
+    if (image.alt) setHeroImageAlt(image.alt);
+  }
+
+  /** Opens the grid on the table under the caret, or on a fresh one when there is none. */
+  function openTableBuilder() {
+    const offset = bodyRef.current?.selectionStart ?? bodyMarkdown.length;
+    const existing = tableAtOffset(bodyMarkdown, offset);
+    setEditingTable(existing ? { table: existing, mode: "edit", offset } : { table: emptyTable(), mode: "insert", offset });
+  }
+
+  function applyTable(next: markdownTable) {
+    if (!editingTable) return;
+    if (editingTable.mode === "edit") setBodyMarkdown(replaceTable(bodyMarkdown, editingTable.table, next));
+    else insertBlock(formatTable(next), editingTable.offset);
+    setEditingTable(null);
   }
 
   function setCustomSlugValue(value: string) {
@@ -194,7 +254,7 @@ export function ArticleForm({ article, mode, onSubmit, onCancel }: articleFormPr
           </label>
 
           <label className="editor-field">
-            <span>Hero image URL</span>
+            <span className="editor-label-row"><span>Hero image URL</span><small>Or pick one from the library below</small></span>
             <input value={heroImageUrl} maxLength={500} placeholder="/images/hero.png" onChange={(event) => setHeroImageUrl(event.target.value)} />
           </label>
 
@@ -219,14 +279,47 @@ export function ArticleForm({ article, mode, onSubmit, onCancel }: articleFormPr
           <button type="button" title="Link" onClick={() => insertToken("[", "](https://)")}><Link2 size={17} /></button>
           <button type="button" title="List" onClick={() => insertToken("\n- ")}><List size={17} /></button>
           <button type="button" title="Quote" onClick={() => insertToken("\n> ")}><Quote size={17} /></button>
+          <button type="button" title="Insert an image" onClick={browseForImages}><ImageIcon size={17} /></button>
+          <button type="button" title="Insert or edit a table" onClick={openTableBuilder}><Table size={17} /></button>
           <button type="button" title="HTML embed" onClick={() => insertToken("\n<div>\n", "\n</div>\n")}><Code2 size={17} /></button>
         </div>
       </div>
 
+      {editingTable ? (
+        <TableBuilder
+          table={editingTable.table}
+          mode={editingTable.mode}
+          onApply={applyTable}
+          onCancel={() => setEditingTable(null)}
+        />
+      ) : null}
+
       <div className="editor-content-grid">
         <label className="editor-panel">
-          <span>Markdown</span>
-          <textarea id="bodyMarkdown" value={bodyMarkdown} placeholder="Start writing in Markdown…" onChange={(event) => setBodyMarkdown(event.target.value)} />
+          <span className="editor-label-row">
+            <span>Markdown</span>
+            <small>{library.uploading ? "Uploading image…" : "Paste or drop an image straight in"}</small>
+          </span>
+          <textarea
+            ref={bodyRef}
+            id="bodyMarkdown"
+            value={bodyMarkdown}
+            placeholder="Start writing in Markdown…"
+            onChange={(event) => setBodyMarkdown(event.target.value)}
+            onPaste={(event) => {
+              const files = imageFilesFrom(event.clipboardData);
+              if (!files.length) return;
+              event.preventDefault();
+              uploadAndInsert(files);
+            }}
+            onDragOver={(event) => imageFilesFrom(event.dataTransfer).length && event.preventDefault()}
+            onDrop={(event) => {
+              const files = imageFilesFrom(event.dataTransfer);
+              if (!files.length) return;
+              event.preventDefault();
+              uploadAndInsert(files);
+            }}
+          />
         </label>
         <div className="editor-panel">
           <span>Live preview</span>
@@ -235,6 +328,21 @@ export function ArticleForm({ article, mode, onSubmit, onCancel }: articleFormPr
           </div>
         </div>
       </div>
+
+      <input
+        ref={fileInput}
+        type="file"
+        accept="image/*"
+        multiple
+        hidden
+        onChange={(event) => {
+          const files = Array.from(event.target.files || []).filter((file) => file.type.startsWith("image/"));
+          event.target.value = "";
+          if (files.length) uploadAndInsert(files);
+        }}
+      />
+
+      <ArticleImageLibrary library={library} onInsert={(markdown) => insertBlock(markdown)} onUseAsHero={useAsHero} />
 
       {formError ? <div className="admin-error editor-error">{formError}</div> : null}
 

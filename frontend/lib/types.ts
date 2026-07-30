@@ -15,6 +15,28 @@ export type articleImage = {
   caption?: string;
 };
 
+/** A stored image. The id is a digest of the bytes, so `url` never changes meaning and is cached forever. */
+export type imageAsset = {
+  id: string;
+  url: string;
+  contentType: string;
+  width: number;
+  height: number;
+  byteSize: number;
+  alt: string;
+  filename: string;
+  createdUnix: number;
+  updatedUnix: number;
+};
+
+export type imageAssetList = {
+  total: number;
+  bytesUsed: number;
+  /** What is left of the library's storage ceiling, in bytes. */
+  bytesAvailable: number;
+  images: imageAsset[];
+};
+
 export type articleSummary = {
   id: string;
   title: string;
