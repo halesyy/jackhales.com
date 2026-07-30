@@ -21,10 +21,15 @@ from .config import getSettings
 from .content import (
     ContentEditError,
     deleteSection,
+    insertImage,
     insertSection,
+    moveImage,
+    removeImage,
     replaceSection,
     replaceText,
+    summarizeBodyImages,
     summarizeSections,
+    updateImage,
 )
 from .database import closeClient, ensureIndexes, getDatabase
 from .images import (
@@ -48,6 +53,9 @@ from .schemas import (
     ArticleOut,
     ArticleSummary,
     ArticleUpdate,
+    BodyImageInsert,
+    BodyImageList,
+    BodyImageUpdate,
     BodyReplace,
     DraftBody,
     DraftCreate,
@@ -309,13 +317,12 @@ async def getImage(imageId: str, database: AsyncIOMotorDatabase = Depends(databa
     )
 
 
-@app.post("/api/admin/images", response_model=ImageAsset, dependencies=[Depends(adminOnly)])
-async def uploadImage(request: Request, database: AsyncIOMotorDatabase = Depends(database)) -> dict:
-    """Take raw image bytes from the editor and hand back the URL to write into Markdown.
+async def storeUploadedImage(request: Request, database: AsyncIOMotorDatabase, uploadedBy: str) -> dict:
+    """Take raw image bytes and hand back the URL to write into Markdown.
 
-    The body is the file itself rather than a multipart form: the editor already
-    holds the bytes after a paste, and the declared content type is ignored in
-    favour of what the bytes actually prove they are.
+    The body is the file itself rather than a multipart form: a paste already
+    holds the bytes, and so does an agent reading a file. The declared content
+    type is ignored in favour of what the bytes actually prove they are.
     """
     declaredLength = int(request.headers.get("content-length") or 0)
     if declaredLength > maxImageBytes:
@@ -323,16 +330,26 @@ async def uploadImage(request: Request, database: AsyncIOMotorDatabase = Depends
 
     data = await request.body()
     try:
-        stored = await storeImage(
+        return await storeImage(
             database,
             data,
             request.headers.get("x-image-filename", ""),
             request.headers.get("x-image-alt", ""),
-            await authenticatedAdminEmail(database, request) or "",
+            uploadedBy,
         )
     except ImageError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
-    return serializeImage(stored, apiBaseUrl(request))
+
+
+def apiKeyActor(record: dict) -> str:
+    """Who to record against an image an API key uploaded."""
+    return f"api-key:{record.get('label') or record.get('hint', '')}"
+
+
+@app.post("/api/admin/images", response_model=ImageAsset, dependencies=[Depends(adminOnly)])
+async def uploadImage(request: Request, database: AsyncIOMotorDatabase = Depends(database)) -> dict:
+    uploadedBy = await authenticatedAdminEmail(database, request) or ""
+    return serializeImage(await storeUploadedImage(request, database, uploadedBy), apiBaseUrl(request))
 
 
 @app.get("/api/admin/images", response_model=ImageAssetList, dependencies=[Depends(adminOnly)])
@@ -521,11 +538,13 @@ async def contentWhoami(record: dict = Depends(apiKeyOnly)) -> dict[str, object]
             "read published and draft articles",
             "create drafts",
             "edit draft title, slug, summary, body, sections, SEO fields and images",
+            "upload images to the shared library, list it, and correct alt text",
         ],
         "restrictions": [
             "cannot publish or unpublish an article",
             "cannot modify an article whose status is published",
             "cannot delete articles",
+            "cannot delete an image from the library",
             "cannot set aiAssisted; every edit made with this key marks the article as AI-assisted",
         ],
     }
@@ -674,6 +693,123 @@ async def contentDeleteSection(
 ) -> dict:
     article = await loadEditableDraft(database, slug)
     return await saveBodyEdit(database, article, lambda body: deleteSection(body, sectionId))
+
+
+@app.get("/api/content/articles/{slug}/images", response_model=BodyImageList)
+async def contentListBodyImages(
+    slug: str,
+    database: AsyncIOMotorDatabase = Depends(database),
+    record: dict = Depends(apiKeyOnly),
+) -> dict:
+    """Where every picture currently sits, so it can be addressed by id rather than by rewriting prose."""
+    article = await loadArticleForApiKey(database, slug)
+    status = article.get("status", "draft")
+    return {
+        "slug": article["slug"],
+        "status": status,
+        "editable": status == "draft",
+        "images": summarizeBodyImages(article.get("bodyMarkdown", "")),
+    }
+
+
+@app.post("/api/content/articles/{slug}/images", response_model=ArticleOut)
+async def contentInsertBodyImage(
+    slug: str,
+    payload: BodyImageInsert,
+    database: AsyncIOMotorDatabase = Depends(database),
+    record: dict = Depends(apiKeyOnly),
+) -> dict:
+    """Place an image on its own line at the start or end of a section."""
+    article = await loadEditableDraft(database, slug)
+    return await saveBodyEdit(
+        database,
+        article,
+        lambda body: insertImage(body, payload.url, payload.alt, payload.caption, payload.section, payload.position),
+    )
+
+
+@app.patch("/api/content/articles/{slug}/images/{imageRef}", response_model=ArticleOut)
+async def contentUpdateBodyImage(
+    slug: str,
+    imageRef: str,
+    payload: BodyImageUpdate,
+    database: AsyncIOMotorDatabase = Depends(database),
+    record: dict = Depends(apiKeyOnly),
+) -> dict:
+    """Edit an image's alt, caption or url in place, or move it to another section."""
+    article = await loadEditableDraft(database, slug)
+    moving = payload.section is not None or payload.position is not None
+    editing = payload.alt is not None or payload.caption is not None or payload.url is not None
+    if not moving and not editing:
+        raise HTTPException(status_code=422, detail="provide alt, caption, url, section or position")
+
+    def edit(body: str) -> str:
+        if editing:
+            body = updateImage(body, imageRef, payload.alt, payload.caption, payload.url)
+        if moving:
+            body = moveImage(body, imageRef, payload.section, payload.position or "end")
+        return body
+
+    return await saveBodyEdit(database, article, edit)
+
+
+@app.delete("/api/content/articles/{slug}/images/{imageRef}", response_model=ArticleOut)
+async def contentRemoveBodyImage(
+    slug: str,
+    imageRef: str,
+    database: AsyncIOMotorDatabase = Depends(database),
+    record: dict = Depends(apiKeyOnly),
+) -> dict:
+    """Take an image out of the body. The image itself stays in the library."""
+    article = await loadEditableDraft(database, slug)
+    return await saveBodyEdit(database, article, lambda body: removeImage(body, imageRef))
+
+
+@app.post("/api/content/images", response_model=ImageAsset, status_code=201)
+async def contentUploadImage(
+    request: Request,
+    database: AsyncIOMotorDatabase = Depends(database),
+    record: dict = Depends(apiKeyOnly),
+) -> dict:
+    """Add an image to the library so a draft can reference it.
+
+    Adding a picture is neither publishing nor a change to published work, so a
+    draft key may do it. The library's storage ceiling bounds what any key can
+    consume, and images are never deleted through this path.
+    """
+    stored = await storeUploadedImage(request, database, apiKeyActor(record))
+    return serializeImage(stored, apiBaseUrl(request))
+
+
+@app.get("/api/content/images", response_model=ImageAssetList)
+async def contentListImages(
+    request: Request,
+    database: AsyncIOMotorDatabase = Depends(database),
+    record: dict = Depends(apiKeyOnly),
+) -> dict:
+    """The library, so an agent can reuse an existing image instead of inventing a URL."""
+    images = await listImages(database)
+    bytesUsed = await storedByteTotal(database)
+    budget = int(settings["imageStorageMaxBytes"])
+    return {
+        "total": len(images),
+        "bytesUsed": bytesUsed,
+        "bytesAvailable": max(budget - bytesUsed, 0),
+        "images": [serializeImage(image, apiBaseUrl(request)) for image in images],
+    }
+
+
+@app.patch("/api/content/images/{imageId}", response_model=ImageAsset)
+async def contentUpdateImageAlt(
+    imageId: str,
+    payload: ImageAltUpdate,
+    request: Request,
+    database: AsyncIOMotorDatabase = Depends(database),
+    record: dict = Depends(apiKeyOnly),
+) -> dict:
+    if not await readImage(database, imageId):
+        raise HTTPException(status_code=404, detail="image not found")
+    return serializeImage(await setImageAlt(database, imageId, payload.alt), apiBaseUrl(request))
 
 
 @app.post("/api/subscribers", response_model=SubscriberIssued, status_code=201)

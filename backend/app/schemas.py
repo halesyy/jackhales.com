@@ -265,6 +265,56 @@ class BodyReplace(DraftPayload):
     expectedCount: int | None = Field(default=None, ge=1)
 
 
+class BodyImageInsert(DraftPayload):
+    url: str = Field(min_length=1, max_length=500)
+    alt: str = Field(default="", max_length=imageAltMaxLength)
+    caption: str = Field(default="", max_length=300)
+    section: str | None = None
+    position: str = Field(default="end", pattern="^(start|end)$")
+
+    @field_validator("url")
+    @classmethod
+    def validateUrl(cls, value: str) -> str:
+        url = validateAssetUrl(value)
+        if not url:
+            raise ValueError("an image needs a url")
+        return url
+
+
+class BodyImageUpdate(DraftPayload):
+    """Alt, caption and url edit in place; section and position move the image."""
+
+    alt: str | None = Field(default=None, max_length=imageAltMaxLength)
+    caption: str | None = Field(default=None, max_length=300)
+    url: str | None = Field(default=None, max_length=500)
+    section: str | None = None
+    position: str | None = Field(default=None, pattern="^(start|end)$")
+
+    @field_validator("url")
+    @classmethod
+    def validateUrl(cls, value: str | None) -> str | None:
+        return validateAssetUrl(value)
+
+
+class BodyImageOut(BaseModel):
+    id: str
+    index: int
+    alt: str
+    url: str
+    caption: str
+    """A standalone image renders as a figure; one inside a sentence stays inline."""
+    standalone: bool
+    sectionId: str
+    sectionHeading: str
+
+
+class BodyImageList(BaseModel):
+    slug: str
+    status: str
+    editable: bool
+    images: list[BodyImageOut]
+
+
 class SectionOut(BaseModel):
     id: str
     index: int

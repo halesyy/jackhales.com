@@ -113,10 +113,35 @@ the site renders them.
 
 ### Images
 
-**A key cannot upload an image.** `POST /api/admin/images` requires an admin
-session, so a picture enters the library only when it is pasted or dropped into
-the editor. A key may reference an image that already exists; it must never
-invent a URL, because a guessed one renders as a broken image.
+A key can upload a picture, place it, move it and re-describe it:
+
+| Endpoint | Does |
+| --- | --- |
+| `GET /api/content/images` | list the shared library |
+| `POST /api/content/images` | upload; the body is the file itself |
+| `PATCH /api/content/images/{imageId}` | correct the alt stored on the library record |
+| `GET /api/content/articles/{slug}/images` | where each picture sits in one article |
+| `POST /api/content/articles/{slug}/images` | place one in a section |
+| `PATCH /api/content/articles/{slug}/images/{imageRef}` | edit alt/caption/url, or move it |
+| `DELETE /api/content/articles/{slug}/images/{imageRef}` | take it out of the body |
+
+A key **cannot** delete from the library, and every body route refuses a
+published article with `409` like any other body edit. Placement, movement and
+removal all set `aiAssisted`.
+
+Uploads take raw bytes with an optional `X-Image-Filename` and `X-Image-Alt`
+header — not a multipart form. The format is sniffed from the bytes, so the
+declared content type is irrelevant and SVG is refused. 8 MB per image, bounded
+overall by `IMAGE_STORAGE_MAX_BYTES`.
+
+Nothing resizes server-side. The browser editor downscales a paste to 1800px and
+re-encodes it as WebP; an API client should do the equivalent before uploading,
+or readers pay for the full-size original.
+
+`GET /api/content/articles/{slug}/images` returns each image with a stable `id`
+(the content digest for an uploaded picture), the `sectionId` it sits in, and
+whether it is `standalone` — an image on its own line renders as a figure, one
+inside a sentence stays inline and can be edited but not moved.
 
 ```markdown
 ![A revenue chart broken down by region](https://api.jackhales.com/api/images/70486bca…?w=1800&h=1013 "Revenue by region, FY2026")

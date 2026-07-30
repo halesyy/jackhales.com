@@ -9,10 +9,16 @@ from app.main import (
     adminDeleteImage,
     adminListImages,
     adminUpdateImageAlt,
+    contentListImages,
+    contentUpdateImageAlt,
+    contentUploadImage,
+    contentWhoami,
     getImage,
     uploadImage,
 )
 from app.schemas import ImageAltUpdate
+
+apiKeyRecord = {"label": "plumb adapter", "hint": "jhk_live_…abcd", "scope": "articles:draft"}
 
 
 def pngBytes(width: int = 640, height: int = 360, marker: bytes = b"") -> bytes:
@@ -317,6 +323,83 @@ class ImageLibraryTest(unittest.IsolatedAsyncioTestCase):
             await adminDeleteImage("nope", FakeDatabase())
 
         self.assertEqual(caught.exception.status_code, 404)
+
+
+class ContentKeyImageTest(unittest.IsolatedAsyncioTestCase):
+    """A draft key can add pictures to an article. It just cannot take them away."""
+
+    async def testAKeyCanUploadAnImageAndGetBackAUsableUrl(self) -> None:
+        database = FakeDatabase()
+        data = pngBytes(1200, 800)
+
+        result = await contentUploadImage(uploadRequest(data, "chart.png", "A chart"), database, apiKeyRecord)
+
+        self.assertEqual(result["id"], imageId(data))
+        self.assertEqual(result["url"], f"https://api.jackhales.com/api/images/{imageId(data)}?w=1200&h=800")
+        self.assertEqual(result["alt"], "A chart")
+
+    async def testAnImageUploadedByAKeyIsAttributedToThatKey(self) -> None:
+        database = FakeDatabase()
+
+        await contentUploadImage(uploadRequest(pngBytes(200, 100)), database, apiKeyRecord)
+
+        stored = await database.articleImages.find_one({"_id": imageId(pngBytes(200, 100))})
+        self.assertEqual(stored["uploadedBy"], "api-key:plumb adapter")
+
+    async def testAKeyAndTheAdminShareOneLibrary(self) -> None:
+        database = FakeDatabase()
+        await uploadImage(uploadRequest(pngBytes(640, 360)), database)
+        await contentUploadImage(uploadRequest(jpegBytes(800, 600)), database, apiKeyRecord)
+
+        listing = await contentListImages(plainRequest(), database, apiKeyRecord)
+
+        self.assertEqual(listing["total"], 2)
+        self.assertEqual(listing["bytesUsed"], sum(image["byteSize"] for image in listing["images"]))
+        self.assertNotIn("data", str(listing))
+
+    async def testAKeyCanCorrectAltTextOnAnImage(self) -> None:
+        database = FakeDatabase()
+        stored = await contentUploadImage(uploadRequest(pngBytes(640, 360)), database, apiKeyRecord)
+
+        updated = await contentUpdateImageAlt(stored["id"], ImageAltUpdate(alt="A clearer description"), plainRequest(), database, apiKeyRecord)
+
+        self.assertEqual(updated["alt"], "A clearer description")
+
+    async def testAKeyIsRefusedAnUploadThatIsNotAnImage(self) -> None:
+        database = FakeDatabase()
+
+        with self.assertRaises(HTTPException) as caught:
+            await contentUploadImage(uploadRequest(b"<svg><script>alert(1)</script></svg>"), database, apiKeyRecord)
+
+        self.assertEqual(caught.exception.status_code, 422)
+        self.assertEqual(database.articleImages.documents, [])
+
+    async def testTheStorageCeilingAppliesToKeysToo(self) -> None:
+        database = FakeDatabase()
+        database.articleImages.documents.append({"_id": "existing", "byteSize": 256 * 1024 * 1024, "data": b""})
+
+        with self.assertRaises(HTTPException) as caught:
+            await contentUploadImage(uploadRequest(pngBytes(10, 10)), database, apiKeyRecord)
+
+        self.assertEqual(caught.exception.status_code, 422)
+
+    async def testThereIsNoKeyRouteForDeletingAnImage(self) -> None:
+        from app.main import app
+
+        deleteRoutes = {
+            route.path
+            for route in app.routes
+            if "DELETE" in getattr(route, "methods", set()) and getattr(route, "path", "").startswith("/api/content")
+        }
+
+        self.assertNotIn("/api/content/images/{imageId}", deleteRoutes)
+
+    async def testWhoamiAnnouncesUploadingAndTheDeletionLimit(self) -> None:
+        identity = await contentWhoami(apiKeyRecord)
+
+        self.assertTrue(any("upload images" in line for line in identity["permissions"]))
+        self.assertTrue(any("cannot delete an image" in line for line in identity["restrictions"]))
+        self.assertIs(identity["canPublish"], False)
 
 
 if __name__ == "__main__":

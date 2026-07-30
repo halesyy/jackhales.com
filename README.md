@@ -45,9 +45,10 @@ article **drafts**. Only one key exists at a time, and generating a new one
 supersedes the previous one. Only the hash is stored; the key is shown once.
 
 The key can read every article and edit drafts — title, slug, summary, raw
-Markdown, individual sections, SEO fields, and images. It can never publish,
-never change a published article, and never delete one. Publishing stays with the
-admin session.
+Markdown, individual sections, SEO fields, and images. It can upload a picture,
+place it in a section, move it and re-describe it. It can never publish, never
+change a published article, never delete one, and never delete from the image
+library. Publishing stays with the admin session.
 
 ```sh
 scripts/jackhales-content status
@@ -100,6 +101,17 @@ The **Images** block under the editor lists everything stored, with the alt text
 kept next to the picture it describes — set it once and every later insert of
 that image starts out described. An image can be inserted, copied, made the hero
 image, or removed; removal is refused while any article still references it.
+
+An agent works the same library through the draft API. `body-images` maps the
+pictures in an article the way `sections` maps its prose, and each one can be
+placed, moved between sections, re-described or removed on its own without
+rewriting the surrounding text:
+
+```sh
+scripts/jackhales-content upload-image chart.png --alt "Revenue by region" --apply
+scripts/jackhales-content add-image a-draft URL --section results --at start --apply
+scripts/jackhales-content move-image a-draft IMAGE_ID --section background --apply
+```
 
 Uploads are admin-only and bounded: 8 MB per image, PNG/JPEG/GIF/WebP only
 (sniffed from the bytes, never from the declared content type), and a library

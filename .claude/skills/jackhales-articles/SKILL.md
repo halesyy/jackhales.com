@@ -103,16 +103,35 @@ scripts/jackhales-content set SLUG \
 set them when they should differ. Image and canonical URLs must start with
 `https://`, `http://` or `/`. Use `--clear-hero-image` to remove a hero image.
 
-## Images In The Body
+## Images
 
-**You cannot upload an image.** Uploading is admin-only, so a picture enters the
-library only when Jack pastes or drops one into the editor. Never invent an image
-URL — a guessed one renders as a broken image on a published page.
+Upload a picture, place it, move it and fix its alt text with the image
+commands. Never hand-write an image into the body with `section` or `body` —
+these keep the article's spacing intact and let the picture be addressed again.
 
-Use a URL that already appears in an article (`read SLUG --raw`), a file the site
-already ships such as `/oman.jpeg`, or one Jack gives you after pasting the image
-into `/admin`. If a section needs a picture that does not exist yet, write the
-section without it and tell Jack what to paste and where.
+```sh
+scripts/jackhales-content images
+scripts/jackhales-content upload-image chart.png --alt "Revenue by region" --apply
+scripts/jackhales-content body-images SLUG
+scripts/jackhales-content add-image SLUG URL --alt "…" --caption "…" --section results --at start --apply
+scripts/jackhales-content move-image SLUG IMAGE_ID --section background --at end --apply
+scripts/jackhales-content edit-image SLUG IMAGE_ID --alt "…" --apply
+scripts/jackhales-content drop-image SLUG IMAGE_ID --apply
+```
+
+`body-images` is the map of the pictures in an article, the way `sections` is the
+map of its prose. Ids and numeric indexes are interchangeable. `--section` takes
+a section id; `--at start` puts the image under the heading, `--at end` after the
+prose. Moving keeps the alt and caption and never leaves a double blank line.
+
+**Resize before uploading.** The browser editor downscales a paste to 1800px wide
+and re-encodes as WebP — a 3MB screenshot becomes ~20KB. Nothing does that for
+you here, so aim for 1800px or less (`sips -Z 1800 in.png --out out.png`). PNG,
+JPEG, GIF and WebP only, sniffed from the bytes. The library cannot be deleted
+from, and no image command works on a published article.
+
+`image-alt IMAGE_ID "…"` sets the alt on the library record, which is the default
+the editor offers next time. `edit-image` changes the alt in one article.
 
 ```markdown
 ![A revenue chart broken down by region](https://api.jackhales.com/api/images/70486bca…?w=1800&h=1013 "Revenue by region, FY2026")

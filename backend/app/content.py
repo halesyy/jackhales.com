@@ -186,6 +186,183 @@ def deleteSection(markdown: str, sectionId: str) -> str:
     return "\n".join(lines[: section["startLine"]] + lines[section["endLine"] :])
 
 
+# Alt text may contain escaped brackets, so the alt group has to allow `\]`.
+imagePattern = re.compile(r"!\[((?:[^\]\\]|\\.)*)\]\(\s*(\S+?)(?:\s+\"([^\"]*)\")?\s*\)")
+
+
+def imageAnchor(url: str) -> str:
+    """A readable id from the URL — for an uploaded image that is its content digest."""
+    tail = url.split("?")[0].split("#")[0].rstrip("/").rsplit("/", 1)[-1]
+    return anchorSlug(tail.rsplit(".", 1)[0]) or "image"
+
+
+def buildImageMarkdown(url: str, alt: str = "", caption: str = "") -> str:
+    """The one place an image block is written, so every writer produces the same shape."""
+    safeAlt = alt.replace("[", "\\[").replace("]", "\\]").strip()
+    title = f' "{caption.strip()}"' if caption.strip() else ""
+    return f"![{safeAlt}]({url.strip()}{title})"
+
+
+def scanBodyImages(markdown: str) -> list[dict]:
+    """Every image in the body, addressable and located, ignoring fenced code blocks."""
+    lines = markdown.split("\n")
+    sections = splitSections(markdown)
+    images: list[dict] = []
+    usedIds: dict[str, int] = {}
+    openFence = ""
+
+    def sectionFor(lineNumber: int) -> dict | None:
+        for section in sections:
+            if section["startLine"] <= lineNumber < section["endLine"]:
+                return section
+        return None
+
+    for number, line in enumerate(lines):
+        if openFence:
+            if line.strip().startswith(openFence):
+                openFence = ""
+            continue
+        fence = fencePattern.match(line)
+        if fence:
+            openFence = fence.group(1)
+            continue
+
+        for match in imagePattern.finditer(line):
+            section = sectionFor(number)
+            images.append(
+                {
+                    "id": uniqueSectionId(imageAnchor(match.group(2)), usedIds),
+                    "index": len(images),
+                    "line": number,
+                    "start": match.start(),
+                    "end": match.end(),
+                    "alt": match.group(1),
+                    "url": match.group(2),
+                    "caption": match.group(3) or "",
+                    # A standalone image renders as a figure; one inside a sentence stays inline.
+                    "standalone": line.strip() == match.group(0),
+                    "sectionId": section["id"] if section else "",
+                    "sectionHeading": section["heading"] if section else "",
+                }
+            )
+    return images
+
+
+def summarizeBodyImages(markdown: str) -> list[dict]:
+    return [
+        {key: image[key] for key in ("id", "index", "alt", "url", "caption", "standalone", "sectionId", "sectionHeading")}
+        for image in scanBodyImages(markdown)
+    ]
+
+
+def findBodyImage(markdown: str, imageRef: str) -> dict:
+    images = scanBodyImages(markdown)
+    for image in images:
+        if image["id"] == imageRef:
+            return image
+    if imageRef.isdigit():
+        for image in images:
+            if image["index"] == int(imageRef):
+                return image
+    known = ", ".join(image["id"] for image in images) or "none"
+    raise ContentEditError(f"unknown image '{imageRef}'; images in this article: {known}")
+
+
+def collapseBlankRun(lines: list[str], at: int) -> list[str]:
+    """After lifting a block out, leave one blank line where there were two."""
+    while at > 0 and at < len(lines) and not lines[at].strip() and not lines[at - 1].strip():
+        lines.pop(at)
+    return lines
+
+
+def detachImage(markdown: str, image: dict) -> str:
+    """Take an image out of the body, leaving the surrounding prose spaced as it was."""
+    lines = markdown.split("\n")
+    if image["standalone"]:
+        lines.pop(image["line"])
+        collapseBlankRun(lines, image["line"])
+    else:
+        line = lines[image["line"]]
+        lines[image["line"]] = f"{line[: image['start']]}{line[image['end'] :]}".rstrip()
+    return "\n".join(lines)
+
+
+def insertImageBlock(markdown: str, block: str, sectionId: str | None, position: str) -> str:
+    """Place an image block at the start or end of a section, or of the whole body."""
+    if position not in ("start", "end"):
+        raise ContentEditError("position must be 'start' or 'end'")
+
+    lines = markdown.split("\n")
+    if sectionId:
+        section = findSection(markdown, sectionId)
+        # 'start' means under the heading, before the section's prose.
+        at = section["startLine"] + (1 if section["level"] else 0) if position == "start" else section["endLine"]
+        while at > section["startLine"] and at - 1 < len(lines) and not lines[at - 1].strip():
+            at -= 1
+    else:
+        at = 0 if position == "start" else len(lines)
+
+    at = max(0, min(at, len(lines)))
+    block_lines = [block]
+    if at > 0 and lines[at - 1].strip():
+        block_lines.insert(0, "")
+    if at < len(lines) and lines[at].strip():
+        block_lines.append("")
+    return "\n".join(lines[:at] + block_lines + lines[at:])
+
+
+def insertImage(
+    markdown: str,
+    url: str,
+    alt: str = "",
+    caption: str = "",
+    section: str | None = None,
+    position: str = "end",
+) -> str:
+    if not url.strip():
+        raise ContentEditError("an image needs a url")
+    return insertImageBlock(markdown, buildImageMarkdown(url, alt, caption), section, position)
+
+
+def moveImage(markdown: str, imageRef: str, section: str | None, position: str = "end") -> str:
+    """Relocate an image that already sits on its own line."""
+    image = findBodyImage(markdown, imageRef)
+    if not image["standalone"]:
+        raise ContentEditError(
+            f"image '{image['id']}' sits inside a paragraph rather than on its own line; "
+            "edit that section directly instead of moving it"
+        )
+    block = buildImageMarkdown(image["url"], image["alt"], image["caption"])
+    return insertImageBlock(detachImage(markdown, image), block, section, position)
+
+
+def updateImage(
+    markdown: str,
+    imageRef: str,
+    alt: str | None = None,
+    caption: str | None = None,
+    url: str | None = None,
+) -> str:
+    """Rewrite one image in place, leaving everything around it untouched."""
+    if alt is None and caption is None and url is None:
+        raise ContentEditError("provide alt, caption, or url")
+
+    image = findBodyImage(markdown, imageRef)
+    replacement = buildImageMarkdown(
+        image["url"] if url is None else url,
+        image["alt"] if alt is None else alt,
+        image["caption"] if caption is None else caption,
+    )
+    lines = markdown.split("\n")
+    line = lines[image["line"]]
+    lines[image["line"]] = f"{line[: image['start']]}{replacement}{line[image['end'] :]}"
+    return "\n".join(lines)
+
+
+def removeImage(markdown: str, imageRef: str) -> str:
+    return detachImage(markdown, findBodyImage(markdown, imageRef))
+
+
 def replaceText(markdown: str, find: str, replacement: str, expectedCount: int | None = None) -> str:
     """Exact-match replacement with an occurrence guard so a stray match cannot rewrite the article."""
     if not find:

@@ -118,6 +118,71 @@ def call(method: str, path: str, body: dict | None = None, query: dict | None = 
         raise ContentCommandError(f"could not reach {baseUrl()}: {error.reason}") from error
 
 
+maxUploadBytes = 8 * 1024 * 1024
+advisoryUploadBytes = 600 * 1024
+
+
+def asciiHeader(value: str) -> str:
+    """Header values are latin-1, so a filename with an emoji cannot ride along verbatim."""
+    return "".join(character for character in value if 0x20 <= ord(character) <= 0x7E).strip()[:300]
+
+
+def uploadImage(path: Path, alt: str, applied: bool) -> Any:
+    """POST the file itself. The API reads the real format out of the bytes."""
+    data = path.read_bytes()
+    if len(data) > maxUploadBytes:
+        raise ContentCommandError(
+            f"{path.name} is {len(data) // 1024}KB; the limit is {maxUploadBytes // (1024 * 1024)}MB. "
+            "Resize it to about 1800px wide and re-encode it first."
+        )
+
+    if not applied:
+        planned: dict[str, Any] = {
+            "action": "upload-image",
+            "apply": False,
+            "alt": alt,
+            "bytes": len(data),
+            "file": str(path),
+            "method": "POST",
+            "path": "/content/images",
+            "status": "planned",
+        }
+        if len(data) > advisoryUploadBytes:
+            planned["advice"] = (
+                f"{len(data) // 1024}KB is heavy for a web page. Resizing to about 1800px wide usually "
+                "lands under 300KB, which is what the browser editor produces."
+            )
+        if not alt.strip():
+            planned["adviceAlt"] = "No --alt given. Alt text is what a screen reader announces; add one."
+        return planned
+
+    key, _ = resolveKey()
+    headers = {
+        "Accept": "application/json",
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/octet-stream",
+        "User-Agent": "jackhales-content/1.0",
+        "X-Image-Filename": asciiHeader(path.name),
+    }
+    if alt.strip():
+        headers["X-Image-Alt"] = asciiHeader(alt)
+
+    try:
+        request = Request(f"{baseUrl()}/content/images", data=data, headers=headers, method="POST")
+        with urlopen(request, timeout=timeoutSeconds) as response:
+            raw = response.read()
+            return json.loads(raw) if raw else None
+    except HTTPError as error:
+        detail = error.read().decode("utf-8", errors="replace")
+        try:
+            detail = json.loads(detail).get("detail", detail)
+        except json.JSONDecodeError:
+            pass
+        raise ContentCommandError(f"HTTP {error.code}: {detail}") from error
+    except URLError as error:
+        raise ContentCommandError(f"could not reach {baseUrl()}: {error.reason}") from error
+
+
 def emit(value: Any) -> None:
     print(json.dumps(value, indent=2, sort_keys=True, default=str))
 
@@ -254,6 +319,50 @@ def buildParser() -> argparse.ArgumentParser:
     drop.add_argument("section_id")
     addApply(drop)
 
+    commands.add_parser("images", help="List the shared image library.")
+
+    upload = commands.add_parser("upload-image", help="Add an image to the library and print its URL.")
+    upload.add_argument("path", help="PNG, JPEG, GIF or WebP file. Resize to about 1800px wide first.")
+    upload.add_argument("--alt", default="", help="What the image shows, for readers who cannot see it.")
+    addApply(upload)
+
+    imageAlt = commands.add_parser("image-alt", help="Correct the alt text stored against a library image.")
+    imageAlt.add_argument("image_id")
+    imageAlt.add_argument("alt")
+    addApply(imageAlt)
+
+    bodyImages = commands.add_parser("body-images", help="List the images placed in an article.")
+    bodyImages.add_argument("slug")
+
+    addImage = commands.add_parser("add-image", help="Place an image on its own line inside a section.")
+    addImage.add_argument("slug")
+    addImage.add_argument("url")
+    addImage.add_argument("--alt", default="")
+    addImage.add_argument("--caption", default="")
+    addImage.add_argument("--section", help="Section id from `sections`; omit for the whole body.")
+    addImage.add_argument("--at", choices=["start", "end"], default="end")
+    addApply(addImage)
+
+    moveImage = commands.add_parser("move-image", help="Move an image to another section.")
+    moveImage.add_argument("slug")
+    moveImage.add_argument("image_ref", help="Image id or index from `body-images`.")
+    moveImage.add_argument("--section")
+    moveImage.add_argument("--at", choices=["start", "end"], default="end")
+    addApply(moveImage)
+
+    editImage = commands.add_parser("edit-image", help="Correct an image's alt, caption or URL in place.")
+    editImage.add_argument("slug")
+    editImage.add_argument("image_ref")
+    editImage.add_argument("--alt")
+    editImage.add_argument("--caption")
+    editImage.add_argument("--url")
+    addApply(editImage)
+
+    dropImage = commands.add_parser("drop-image", help="Take an image out of an article; it stays in the library.")
+    dropImage.add_argument("slug")
+    dropImage.add_argument("image_ref")
+    addApply(dropImage)
+
     return parser
 
 
@@ -304,6 +413,22 @@ def dispatch(arguments: argparse.Namespace) -> None:
 
     if command == "sections":
         emit(call("GET", f"/content/articles/{segment(arguments.slug)}/sections"))
+        return
+
+    if command == "images":
+        emit(call("GET", "/content/images"))
+        return
+
+    if command == "upload-image":
+        emit(uploadImage(Path(arguments.path), arguments.alt, arguments.apply))
+        return
+
+    if command == "image-alt":
+        run(arguments.apply, "set-image-alt", "PATCH", f"/content/images/{segment(arguments.image_id)}", {"alt": arguments.alt})
+        return
+
+    if command == "body-images":
+        emit(call("GET", f"/content/articles/{segment(arguments.slug)}/images"))
         return
 
     if command == "new":
@@ -378,6 +503,37 @@ def dispatch(arguments: argparse.Namespace) -> None:
 
     if command == "drop-section":
         run(arguments.apply, "delete-section", "DELETE", f"{path}/sections/{segment(arguments.section_id)}")
+        return
+
+    if command == "add-image":
+        body = {"url": arguments.url, "alt": arguments.alt, "caption": arguments.caption, "position": arguments.at}
+        if arguments.section:
+            body["section"] = arguments.section
+        run(arguments.apply, "add-image", "POST", f"{path}/images", body)
+        return
+
+    imagePath = f"{path}/images/{segment(getattr(arguments, 'image_ref', ''))}"
+
+    if command == "move-image":
+        body = {"position": arguments.at}
+        if arguments.section:
+            body["section"] = arguments.section
+        run(arguments.apply, "move-image", "PATCH", imagePath, body)
+        return
+
+    if command == "edit-image":
+        body = {}
+        for name in ("alt", "caption", "url"):
+            value = getattr(arguments, name)
+            if value is not None:
+                body[name] = value
+        if not body:
+            raise ContentCommandError("provide --alt, --caption, or --url")
+        run(arguments.apply, "edit-image", "PATCH", imagePath, body)
+        return
+
+    if command == "drop-image":
+        run(arguments.apply, "drop-image", "DELETE", imagePath)
         return
 
 
