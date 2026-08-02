@@ -1,6 +1,14 @@
+# Pin the Compose project name. Deploying from a directory called "repo" made
+# Compose infer the project name "repo", which is generic enough to collide with
+# any other deploy run from a similarly-named directory.
+name: jackhales
+
 services:
   frontend:
     image: ghcr.io/halesyy/jackhales-com-frontend:${IMAGE_TAG:-latest}
+    mem_limit: 384m
+    memswap_limit: 384m
+    pids_limit: 192
     build:
       context: ./frontend
       args:
@@ -51,6 +59,9 @@ services:
 
   backend:
     image: ghcr.io/halesyy/jackhales-com-backend:${IMAGE_TAG:-latest}
+    mem_limit: 384m
+    memswap_limit: 384m
+    pids_limit: 128
     build:
       context: ./backend
     env_file:
