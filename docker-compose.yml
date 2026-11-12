@@ -19,7 +19,7 @@ services:
       INTERNAL_API_BASE_URL: https://api.jackhales.com/api
       PUBLIC_SITE_URL: https://jackhales.com
     depends_on:
-      backend:
+      jackhales-backend:
         condition: service_healthy
     labels:
       - traefik.enable=true
@@ -57,7 +57,10 @@ services:
       - dokploy-network
     restart: unless-stopped
 
-  backend:
+  # Named jackhales-backend, not backend: this service joins the shared
+  # dokploy-network, where a bare `backend` also resolves to other projects'
+  # APIs (geelongsoftware.com's frontend reached this API through that name).
+  jackhales-backend:
     image: ghcr.io/halesyy/jackhales-com-backend:${IMAGE_TAG:-latest}
     mem_limit: 384m
     memswap_limit: 384m

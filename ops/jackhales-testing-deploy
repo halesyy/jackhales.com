@@ -12,7 +12,7 @@ current_sha="$(git rev-parse HEAD 2>/dev/null || true)"
 deployed_sha="$(cat "$state_file" 2>/dev/null || true)"
 running_services="$(IMAGE_TAG=local docker compose ps --status running --services 2>/dev/null | sort | tr '\n' ' ')"
 
-if [[ "$current_sha" == "$remote_sha" && "$deployed_sha" == "$remote_sha" && "$running_services" == *"backend"* && "$running_services" == *"frontend"* ]]; then
+if [[ "$current_sha" == "$remote_sha" && "$deployed_sha" == "$remote_sha" && "$running_services" == *"jackhales-backend"* && "$running_services" == *"frontend"* ]]; then
   echo "No deploy needed for $remote_sha"
   exit 0
 fi
@@ -24,7 +24,7 @@ ln -sfn ../.env .env
 IMAGE_TAG=local docker compose up -d --build --remove-orphans
 IMAGE_TAG=local docker compose ps
 
-backend_id="$(IMAGE_TAG=local docker compose ps -q backend)"
+backend_id="$(IMAGE_TAG=local docker compose ps -q jackhales-backend)"
 backend_health=""
 for _ in $(seq 1 60); do
   backend_health="$(docker inspect --format '{{.State.Health.Status}}' "$backend_id" 2>/dev/null || true)"
