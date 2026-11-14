@@ -79,6 +79,9 @@ export function SiteShell({ children }: siteShellProps) {
             <a href="https://pharmaportal.com.au" target="_blank" rel="noreferrer">
               Pharma Portal <ArrowUpRight size={13} />
             </a>
+            <a href="https://geelongsoftware.com" target="_blank" rel="noopener" title="Geelong Software, my software studio in Geelong">
+              Geelong Software <ArrowUpRight size={13} />
+            </a>
           </div>
         </div>
       </footer>
