@@ -12,7 +12,7 @@ current_sha="$(git rev-parse HEAD 2>/dev/null || true)"
 deployed_sha="$(cat "$state_file" 2>/dev/null || true)"
 running_services="$(IMAGE_TAG=local docker compose ps --status running --services 2>/dev/null | sort | tr '\n' ' ')"
 
-if [[ "$current_sha" == "$remote_sha" && "$deployed_sha" == "$remote_sha" && "$running_services" == *"backend"* && "$running_services" == *"frontend"* ]]; then
+if [[ "$current_sha" == "$remote_sha" && "$deployed_sha" == "$remote_sha" && "$running_services" == *"jackhales-backend"* && "$running_services" == *"frontend"* ]]; then
   echo "No deploy needed for $remote_sha"
   exit 0
 fi
@@ -21,10 +21,20 @@ git checkout -q main
 git reset --hard "$remote_sha"
 ln -sfn ../.env .env
 
-IMAGE_TAG=local docker compose up -d --build --remove-orphans
+# Build through plumb-build-lock so each build is serialised with the other
+# projects on this host and runs inside the memory-capped BuildKit builder.
+# An uncapped Next.js build has frozen compute-2-sydney before (13 Jul, 12 Nov).
+# Keep the build args in step with the build sections of docker-compose.yml.
+plumb-build-lock docker build -t ghcr.io/halesyy/jackhales-com-backend:local ./backend
+plumb-build-lock docker build \
+  --build-arg BUILD_API_BASE_URL=https://api.jackhales.com/api \
+  --build-arg NEXT_PUBLIC_API_BASE_URL=https://api.jackhales.com/api \
+  -t ghcr.io/halesyy/jackhales-com-frontend:local ./frontend
+
+IMAGE_TAG=local docker compose up -d --no-build --remove-orphans
 IMAGE_TAG=local docker compose ps
 
-backend_id="$(IMAGE_TAG=local docker compose ps -q backend)"
+backend_id="$(IMAGE_TAG=local docker compose ps -q jackhales-backend)"
 backend_health=""
 for _ in $(seq 1 60); do
   backend_health="$(docker inspect --format '{{.State.Health.Status}}' "$backend_id" 2>/dev/null || true)"
