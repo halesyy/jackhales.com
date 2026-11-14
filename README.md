@@ -166,13 +166,15 @@ guardrail table.
 
 ## Deployment
 
-GitHub Actions builds frontend and backend images and pushes them to GHCR.
+GitHub Actions builds frontend and backend images and pushes them to GHCR, tagged with the commit sha and `latest`.
 
-The Sydney host also runs a pull-based systemd deploy timer. It pulls `main` from the public repository and runs:
+The Sydney host runs a pull-based systemd deploy timer (`jackhales-testing-deploy.timer`, every minute) that runs `ops/jackhales-testing-deploy`. When `main` moves, it waits until CI has published both images for the new sha, pulls them, tags them `local` and runs:
 
 ```sh
-IMAGE_TAG=local docker compose up -d --build --remove-orphans
+IMAGE_TAG=local docker compose up -d --no-build --remove-orphans
 ```
+
+The host never builds images: Next.js builds froze it twice. The installed copy is `/usr/local/bin/jackhales-testing-deploy`; reinstall it whenever this script changes.
 
 The remote host owns runtime secrets in `/srv/apps/jackhales-testing/.env`. The existing server-side project identifier remains `jackhales-testing` so its MongoDB storage, private network, and deployment timer do not need a destructive rename during the public-domain migration.
 

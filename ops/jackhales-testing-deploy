@@ -17,19 +17,30 @@ if [[ "$current_sha" == "$remote_sha" && "$deployed_sha" == "$remote_sha" && "$r
   exit 0
 fi
 
+# GitHub Actions builds both images and tags them with the commit sha. Wait
+# until both exist before touching anything: the timer checks again in a
+# minute, and the running site stays as it is until then. If CI fails for a
+# commit, its images never appear and the site keeps the last good deploy.
+frontend_image="ghcr.io/halesyy/jackhales-com-frontend:$remote_sha"
+backend_image="ghcr.io/halesyy/jackhales-com-backend:$remote_sha"
+for image in "$backend_image" "$frontend_image"; do
+  if ! docker manifest inspect "$image" >/dev/null 2>&1; then
+    echo "Waiting for CI to publish $image"
+    exit 0
+  fi
+done
+
 git checkout -q main
 git reset --hard "$remote_sha"
 ln -sfn ../.env .env
 
-# Build through plumb-build-lock so each build is serialised with the other
-# projects on this host and runs inside the memory-capped BuildKit builder.
-# An uncapped Next.js build has frozen compute-2-sydney before (13 Jul, 12 Nov).
-# Keep the build args in step with the build sections of docker-compose.yml.
-plumb-build-lock docker build -t ghcr.io/halesyy/jackhales-com-backend:local ./backend
-plumb-build-lock docker build \
-  --build-arg BUILD_API_BASE_URL=https://api.jackhales.com/api \
-  --build-arg NEXT_PUBLIC_API_BASE_URL=https://api.jackhales.com/api \
-  -t ghcr.io/halesyy/jackhales-com-frontend:local ./frontend
+# Nothing is built on this host any more. Next.js builds froze compute-2-sydney
+# (13 Jul, 12 Nov) even when capped, so the host only pulls finished images.
+docker pull -q "$backend_image"
+docker pull -q "$frontend_image"
+# Keep the "local" tag the running containers and the check above use.
+docker tag "$backend_image" ghcr.io/halesyy/jackhales-com-backend:local
+docker tag "$frontend_image" ghcr.io/halesyy/jackhales-com-frontend:local
 
 IMAGE_TAG=local docker compose up -d --no-build --remove-orphans
 IMAGE_TAG=local docker compose ps
@@ -51,3 +62,8 @@ if [[ "$backend_health" != "healthy" ]]; then
 fi
 
 printf '%s\n' "$remote_sha" > "$state_file"
+# Drop the previous commit's sha-tagged images so old layers do not pile up.
+docker image ls --format '{{.Repository}}:{{.Tag}}' \
+  | grep -E '^ghcr\.io/halesyy/jackhales-com-(frontend|backend):[0-9a-f]{40}$' \
+  | grep -v ":$remote_sha\$" \
+  | xargs -r docker image rm >/dev/null 2>&1 || true
