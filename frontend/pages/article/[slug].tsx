@@ -3,11 +3,13 @@ import Head from "next/head";
 import { useEffect, useState } from "react";
 
 import { ArticleView } from "../../components/ArticleView";
+import { ReadNext } from "../../components/ReadNext";
 import { SiteShell } from "../../components/SiteShell";
 import { fetchArticle, fetchArticles, recordArticleView } from "../../lib/api";
+import { pickReadNext, type readNextArticle } from "../../lib/readNext";
 import type { articleDetail } from "../../lib/types";
 
-type articlePageProps = { article: articleDetail };
+type articlePageProps = { article: articleDetail; readNext: readNextArticle | null };
 
 export const getStaticPaths: GetStaticPaths = async () => {
   try {
@@ -27,8 +29,12 @@ export const getStaticProps: GetStaticProps<articlePageProps, { slug: string }> 
 
   try {
     const article = await fetchArticle(params.slug);
+    // A missing suggestion must never take the article down with it.
+    const readNext = await fetchArticles()
+      .then((articles) => pickReadNext(articles, article.slug))
+      .catch(() => null);
     return {
-      props: { article },
+      props: { article, readNext },
       revalidate: 300,
     };
   } catch {
@@ -36,7 +42,7 @@ export const getStaticProps: GetStaticProps<articlePageProps, { slug: string }> 
   }
 };
 
-export default function ArticlePage({ article }: articlePageProps) {
+export default function ArticlePage({ article, readNext }: articlePageProps) {
   const [views, setViews] = useState<number | null>(null);
   const seo = article.seo;
   const metaTitle = seo?.metaTitle || `${article.title} — Jack Hales`;
@@ -76,6 +82,7 @@ export default function ArticlePage({ article }: articlePageProps) {
       </Head>
 
       <ArticleView article={article} views={views} />
+      {readNext ? <ReadNext article={readNext} /> : null}
     </SiteShell>
   );
 }
