@@ -103,9 +103,14 @@ services:
       - traefik.http.routers.jackhales-legacy-backend.tls.certresolver=letsencrypt
       - traefik.http.routers.jackhales-legacy-backend.service=jackhales-backend
       - traefik.http.services.jackhales-backend.loadbalancer.server.port=8000
+    # The database lives in the box's one shared mongod (Compose project
+    # shared-mongodb, network plumb-mongodb), not in a mongod of our own, so
+    # more sites fit in Sydney's memory. MONGODB_URL in .env is unchanged:
+    # the shared mongod also answers to `mongodb`, with the same app user.
     networks:
       - dokploy-network
       - jackhales-private
+      - mongodb
     healthcheck:
       test:
         - CMD
@@ -125,4 +130,7 @@ networks:
   dokploy-network:
     external: true
   jackhales-private:
+    external: true
+  mongodb:
+    name: plumb-mongodb
     external: true
