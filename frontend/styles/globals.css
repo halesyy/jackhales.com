@@ -1426,3 +1426,9 @@ textarea:focus {
   html { scroll-behavior: auto; }
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
 }
+
+.read-next { max-width: 850px; margin: 1.4rem auto 0; }
+.read-next-link { display: block; padding: clamp(1.4rem, 4vw, 2.4rem); }
+.read-next-link h2 { margin: .6rem 0 .5rem; font-size: clamp(1.35rem, 3vw, 2rem); letter-spacing: -.045em; line-height: 1.1; }
+.read-next-summary { margin: 0; color: var(--muted); font-size: .88rem; line-height: 1.65; }
+.read-next-go { display: inline-flex; align-items: center; gap: .35rem; margin-top: 1rem; color: var(--blue); font-size: .8rem; font-weight: 750; }
