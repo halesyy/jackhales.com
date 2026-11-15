@@ -178,6 +178,8 @@ The host never builds images: Next.js builds froze it twice. The installed copy 
 
 The remote host owns runtime secrets in `/srv/apps/jackhales-testing/.env`. The existing server-side project identifier remains `jackhales-testing` so its MongoDB storage, private network, and deployment timer do not need a destructive rename during the public-domain migration.
 
+Since 15 Nov 2026 the database is `jackhales` in the host's one shared mongod (`shared-mongodb-1`, Compose project `shared-mongodb`, network `plumb-mongodb`), set up by Plumb's compose-host guide. The API joins `plumb-mongodb`, where the shared mongod answers to `mongodb`, and `MONGODB_URL` keeps its old value (same `app` user and password, `authSource=jackhales`). The old mongod (`/srv/apps/jackhales-testing-mongodb`, container `jackhales-testing-mongodb-mongodb-1`) is stopped, not removed: never start it while the API runs, or the API can reach two databases under the same name.
+
 Production routing uses `jackhales.com` and `www.jackhales.com` for Next.js, with `www` redirected to the apex domain. `api.jackhales.com` routes to FastAPI. Traefik terminates TLS for all three hostnames with the shared `letsencrypt` certificate resolver.
 
 On a fresh deployment, `/admin` offers one-time account setup for `me@jackhales.com`. Passwords are stored as salted scrypt hashes; the plaintext password is never stored.
