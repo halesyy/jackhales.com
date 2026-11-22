@@ -1,10 +1,9 @@
 import unittest
 from datetime import UTC, datetime
 
+from fakedb import FakeDatabase
 from fastapi import HTTPException, Request
 from pydantic import ValidationError
-
-from fakedb import FakeDatabase
 
 from app.apikeys import issueApiKey, requireApiKey
 from app.main import (

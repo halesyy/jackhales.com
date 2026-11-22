@@ -4,7 +4,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-
 seedPath = Path(__file__).resolve().parent.parent / "seed" / "articles.json"
 seedRoot = seedPath.parent.resolve()
 reseedTokenPath = Path(__file__).resolve().parent.parent / "seed" / "reseed.once"

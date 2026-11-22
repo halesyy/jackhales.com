@@ -41,8 +41,8 @@ from .images import (
     readImage,
     serializeImage,
     setImageAlt,
-    storeImage,
     storedByteTotal,
+    storeImage,
 )
 from .schemas import (
     AdminCredentials,

@@ -3,7 +3,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-
 authMigrationTokenPath = Path(__file__).resolve().parent.parent / "seed" / "auth-migration.once"
 
 

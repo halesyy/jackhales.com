@@ -1,8 +1,7 @@
 import unittest
 
-from fastapi import HTTPException, Request
-
 from fakedb import FakeDatabase
+from fastapi import HTTPException, Request
 
 from app.images import ImageError, imageId, imageUrl, probeImage
 from app.main import (
@@ -361,7 +360,9 @@ class ContentKeyImageTest(unittest.IsolatedAsyncioTestCase):
         database = FakeDatabase()
         stored = await contentUploadImage(uploadRequest(pngBytes(640, 360)), database, apiKeyRecord)
 
-        updated = await contentUpdateImageAlt(stored["id"], ImageAltUpdate(alt="A clearer description"), plainRequest(), database, apiKeyRecord)
+        updated = await contentUpdateImageAlt(
+            stored["id"], ImageAltUpdate(alt="A clearer description"), plainRequest(), database, apiKeyRecord
+        )
 
         self.assertEqual(updated["alt"], "A clearer description")
 
