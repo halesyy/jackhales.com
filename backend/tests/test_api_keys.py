@@ -1,8 +1,7 @@
 import unittest
 
-from fastapi import HTTPException, Request
-
 from fakedb import FakeDatabase
+from fastapi import HTTPException, Request
 
 from app.apikeys import (
     activeKeyId,

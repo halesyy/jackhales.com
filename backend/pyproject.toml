@@ -1,6 +1,7 @@
 [tool.ruff]
 line-length = 140
 target-version = "py312"
+extend-exclude = ["venv", ".venv"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]

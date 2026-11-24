@@ -1,10 +1,9 @@
 import unittest
 from unittest.mock import patch
 
+from fakedb import FakeDatabase
 from fastapi import HTTPException, Request
 from pydantic import ValidationError
-
-from fakedb import FakeDatabase
 
 from app.main import (
     adminListSubscribers,
